@@ -1,3 +1,9 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "35mb",
+    },
+  },
+};
 module.exports = nextConfig;
