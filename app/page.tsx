@@ -408,13 +408,8 @@ export default function Home() {
           <div className="flex-1 min-w-[250px]">
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl px-4 py-3 border border-indigo-100">
               <span className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">Plan Days</span>
-              <p className="text-sm font-semibold text-slate-700 mt-0.5 flex items-center gap-1.5">
-                {days.map((d, i) => (
-                  <span key={d} className="flex items-center gap-1.5">
-                    <span>{d}</span>
-                    {i < 3 && <span className="text-indigo-300">&rarr;</span>}
-                  </span>
-                ))}
+              <p className="text-sm font-semibold text-slate-700 mt-0.5">
+                {days[0]} <span className="text-indigo-300">&rarr;</span> {days[1]} <span className="text-indigo-300">&rarr;</span> {days[2]} <span className="text-indigo-300">&rarr;</span> {days[3]}
               </p>
             </div>
           </div>
