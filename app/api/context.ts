@@ -13,26 +13,65 @@ Notes format: "3/12 NB: [update]" means Nick B wrote this note on March 12th.
 `;
 
 export const STUDY_RESOURCES = `
-AVAILABLE STUDY RESOURCES — Include direct URLs when referencing these in action plans:
+AVAILABLE STUDY RESOURCES — Include direct URLs when referencing these in action plans.
+IMPORTANT: Match resources to the sponsor's CURRENT EXAM. Only recommend resources for the exam they are actively studying for.
 
-PLATFORMS:
+PLATFORMS (all exams):
 - Achievable: Primary study platform. Has Q-bank (chapter quizzes), simulated final exams, certification section, study feedback analytics, enrollment rate %. Tracks progress by chapter/unit.
 - Kaplan: Secondary Q-bank with larger question pool. Good for sponsors memorizing Achievable answers. Login: https://home.kaplanlearn.com/login
-- TestGeek: Video courses for SIE & 65 exams. Login: https://sso.teachable.com/secure/104393/identity/login/password
+- TestGeek: Video courses for SIE & 65 exams. Login: https://sso.teachable.com/secure/104393/identity/login/password (Username: lexi.gryb@floridafa.com / Password: FFATeam2024!)
 
-YOUTUBE CHANNELS (free review resources — include channel URL when recommending):
-- Capital Advantage: Full exam walkthroughs — watch someone take an entire exam. Great for test-taking strategy. https://www.youtube.com/@Series7Exam/playlists
-- S7 Guru: Series 7 and securities exam review. https://www.youtube.com/@Series7Guru
-- Insurance Queen: Insurance exam prep (LAH/VA). https://www.youtube.com/@insuranceexamqueen
-- Insurance Test Help: Insurance exam review videos. https://www.youtube.com/@insurancetesthelp
+=== SIE RESOURCES ===
+Study Playlist (full SIE course — assign when sponsor needs to learn/review concepts):
+  https://youtube.com/playlist?list=PLNuN-FV9-0mG9r0r55ZYZyoGHF1Uwxd8h
+Exam Walkthrough Playlist (watch someone take an SIE exam — assign for test-taking strategy in pre-exam phase):
+  https://youtube.com/playlist?list=PLNuN-FV9-0mE_gK5dZXrNUNG_4LR8gBvA
+Night Before / Morning Of Review (ONLY assign 1-2 days before exam):
+  https://youtu.be/_-x-RFmFAD0
+FINRA Official SIE Practice Exam (assign in pre-exam phase as a benchmark):
+  https://www.finra.org/registration-exams-ce/qualification-exams/securities-industry-essentials-exam/practice-test
+TestGeek SIE Video Course (assign when sponsor needs visual/video instruction instead of reading):
+  https://sso.teachable.com/secure/104393/identity/login/password
+Capital Advantage Exam Walkthroughs (great for elimination strategy practice):
+  https://www.youtube.com/@Series7Exam/playlists
 
-SPECIFIC REVIEW VIDEOS (include the direct link when assigning these):
-- SIE Night Before/Morning Of review: https://youtu.be/_-x-RFmFAD0
-- Series 63 Last Minute Review (covers 65 Regulation Portion): https://youtu.be/V930rAiHU3M
-- Series 65/66 Last Minute Review (send with 63 review): https://youtu.be/qkujNenJtTw
-- GA Laws Video for LAH (essential for GA test-takers): https://youtu.be/46yDW2KTDf0
-- 65 Exam Practice Questions walkthrough: https://youtu.be/Hrcb0kaXpZw
-- SIE FINRA Official Practice Exam: https://www.finra.org/registration-exams-ce/qualification-exams/securities-industry-essentials-exam/practice-test
+=== LAH (Life, Accident & Health) RESOURCES ===
+GA Laws Video — MUST WATCH (essential for GA test-takers, assign early in LAH study):
+  https://youtu.be/46yDW2KTDf0
+Insurance Queen (exam prep videos — assign when struggling with insurance concepts):
+  https://www.youtube.com/@insuranceexamqueen
+Insurance Exam channel (additional insurance exam review):
+  https://www.youtube.com/@InsuranceExam
+Insurance Test Help (exam review videos — assign for targeted topic review):
+  https://www.youtube.com/@insurancetesthelp
+
+=== SERIES 63 RESOURCES ===
+Series 63 Full Study Playlist (assign when sponsor needs to learn/review 63 concepts):
+  https://youtube.com/playlist?list=PLNuN-FV9-0mEBIAbSDTQCk9HjOFrDD9j8
+Series 63 Exam Walkthrough Playlist (assign in pre-exam phase for test strategy):
+  https://youtube.com/playlist?list=PLNuN-FV9-0mE_gK5dZXrNUNG_4LR8gBvA
+Last Minute Series 63 Review (ONLY assign 1-2 days before exam — also covers 65 regulation portion):
+  https://youtu.be/V930rAiHU3M
+
+=== SERIES 65 RESOURCES ===
+65 Realistic Exam Questions Video 1 (assign for practice question walkthrough):
+  https://youtu.be/Hrcb0kaXpZw
+65 Realistic Exam Questions Video 2 (assign after video 1 for more practice):
+  https://youtu.be/WR4EBsGysA8
+65 Full Exam Walkthrough (assign in pre-exam phase):
+  https://youtu.be/2XNW0a5tQz8
+65 Ken YT Playlist (comprehensive 65 review — assign when struggling with multiple topics):
+  https://youtube.com/playlist?list=PLNuN-FV9-0mH5VkdfpKwlKfapPHbT8lYH
+Series 7 Guru 65 Playlist (alternative 65 review — assign when sponsor needs a different teaching style):
+  https://www.youtube.com/playlist?list=PLK1IazV_JQbEKhC3iQqzTRfXuWNpE3p_e
+TestGeek 65 Video Course (assign when sponsor needs structured video instruction):
+  https://sso.teachable.com/secure/104393/identity/login/password
+Series 65/66 Last Minute Review (ONLY assign 1-2 days before exam):
+  https://youtu.be/qkujNenJtTw
+
+=== GENERAL YOUTUBE CHANNELS ===
+- Capital Advantage: Full exam walkthroughs. https://www.youtube.com/@Series7Exam/playlists
+- S7 Guru: Securities exam review. https://www.youtube.com/@Series7Guru
 
 KEY ACHIEVABLE METRICS:
 - Enrollment Rate (ER%): How much of the material they've completed
@@ -54,6 +93,31 @@ PLATFORM SWITCHING TRIGGERS:
 - Switch to Kaplan when Achievable scores plateau above 75% for 3+ attempts — the sponsor is memorizing answers, not learning concepts.
 - If scores DROP after switching to Kaplan, that confirms memorization was the issue — keep on Kaplan until scores stabilize, then alternate.
 - If a sponsor has done 500+ Q-bank questions with no score improvement, the issue isn't volume — they need to change their study METHOD (active recall, error analysis, or video instruction). Flag this for DM intervention.
+`;
+
+export const CHAPTER_RECOMMENDATION_LOGIC = `
+WHEN TO RECOMMEND VIDEO RESOURCES — Use this logic to decide when to assign supplementary videos:
+
+TRIGGER: Sponsor is scoring below 70% on a specific chapter, section, or topic area for 2+ attempts.
+ACTION: Recommend a targeted video resource FROM THAT EXAM'S resource list, IN ADDITION to Q-bank drilling.
+
+MATCHING RULES:
+1. ALWAYS match the video to the sponsor's CURRENT EXAM — never recommend SIE videos to someone studying for 65.
+2. For BROAD weakness (struggling across 3+ chapters/topics): Assign the full study playlist for that exam so they can work through it systematically.
+3. For NARROW weakness (1-2 specific topics): Assign a specific video or exam walkthrough targeting that area, paired with 30-50 targeted Q-bank questions on the same topic.
+4. For TEST-TAKING STRATEGY weakness (scoring well on chapter quizzes but poorly on simulated exams): Assign exam walkthrough videos — the issue is strategy, not content knowledge.
+5. For FINAL PREP (1-2 days before exam): Assign the "Last Minute" or "Night Before/Morning Of" review video for that exam. Do NOT assign these earlier — they're designed as rapid refreshers, not learning tools.
+
+SUPPLEMENTARY VIDEO RULES:
+- Videos are supplements, NOT replacements for Q-bank practice. Every video assignment should be paired with a follow-up Q-bank session.
+- After watching a video: "Watch [video], then immediately do 30-50 Q-bank questions on the same topic while the content is fresh. Target: 80%+"
+- If a sponsor says they prefer watching videos over reading, lean into video resources (TestGeek, YouTube playlists) BUT still require Q-bank practice after each video session.
+- Exam walkthrough videos should be watched actively: "Pause after each question, try to answer it yourself first, then watch the explanation."
+
+WHEN NOT TO RECOMMEND VIDEOS:
+- If the sponsor is scoring above 75% consistently — they don't need supplementary video, they need more practice questions
+- If the issue is study VOLUME (not logging in, not doing enough questions) — videos won't fix a motivation problem, flag for DM intervention instead
+- If the sponsor has already watched the same video — don't re-assign it, find an alternative resource or switch to a different teaching style
 `;
 
 export const SPECIFICITY_INSTRUCTIONS = `
@@ -119,6 +183,10 @@ GOOD examples (use these as models):
 - "Evening review: Go through today's wrong answers in Achievable Study Feedback. Write down the concept behind each wrong answer. This should take 30-45 minutes"
 - "Pomodoro Set 1 (50 min): Do 75 Q-bank questions mixing your 3 weakest topics. 10-min break. Pomodoro Set 2 (50 min): Review every wrong answer — categorize each as 'didn't know', 'misapplied', or 'careless'. Write down concepts for 'didn't know' items."
 - "Spaced review: Before starting new material, redo the 20 questions you got wrong yesterday. Then move to Chapter 5-6, quiz after each. If yesterday's weak areas haven't improved to 75%+, stay on review."
+- "You're struggling with Options and Suitability on the SIE. Watch the SIE study playlist (https://youtube.com/playlist?list=PLNuN-FV9-0mG9r0r55ZYZyoGHF1Uwxd8h) — focus on the Options and Suitability sections. After each video, do 30 Q-bank questions on that topic. Target: 75%+ before moving on."
+- "Your simulated exam scores are stuck at 68% even though chapter quizzes are 80%+. The issue is test-taking strategy, not content. Watch the SIE Exam Walkthrough playlist (https://youtube.com/playlist?list=PLNuN-FV9-0mE_gK5dZXrNUNG_4LR8gBvA) — pause after each question, answer it yourself, then watch the explanation. Take notes on elimination strategies."
+- "For Series 65: Watch the Ken YT playlist (https://youtube.com/playlist?list=PLNuN-FV9-0mH5VkdfpKwlKfapPHbT8lYH) on Investment Advisers and Fiduciary Duty, then do 50 targeted Q-bank questions on those sections. If you score below 70%, watch the S7 Guru 65 playlist (https://www.youtube.com/playlist?list=PLK1IazV_JQbEKhC3iQqzTRfXuWNpE3p_e) for a different teaching approach."
+- "LAH final prep: Watch the GA Laws video (https://youtu.be/46yDW2KTDf0) — this is the most important video for LAH. Take handwritten notes. Then do 50 Q-bank questions on Georgia regulations. Target: 80%+. If below 70%, rewatch and redo."
 
 BAD examples (NEVER generate these):
 - "Study more"

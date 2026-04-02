@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { MANAGER_INITIALS, STUDY_RESOURCES, SPECIFICITY_INSTRUCTIONS } from "../context";
+import { MANAGER_INITIALS, STUDY_RESOURCES, SPECIFICITY_INSTRUCTIONS, CHAPTER_RECOMMENDATION_LOGIC } from "../context";
 
 export const maxDuration = 300;
 
@@ -55,6 +55,8 @@ ${MANAGER_INITIALS}
 ${STUDY_RESOURCES}
 
 ${SPECIFICITY_INSTRUCTIONS}
+
+${CHAPTER_RECOMMENDATION_LOGIC}
 
 EMAIL DETAILS:
 - Date: ${date}

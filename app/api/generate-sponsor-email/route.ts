@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { STUDY_RESOURCES, SPECIFICITY_INSTRUCTIONS, SPONSOR_EMAIL_TONE } from "../context";
+import { STUDY_RESOURCES, SPECIFICITY_INSTRUCTIONS, SPONSOR_EMAIL_TONE, CHAPTER_RECOMMENDATION_LOGIC } from "../context";
 
 export const maxDuration = 300;
 
@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
 ${STUDY_RESOURCES}
 
 ${SPECIFICITY_INSTRUCTIONS}
+
+${CHAPTER_RECOMMENDATION_LOGIC}
 
 ${SPONSOR_EMAIL_TONE}
 
