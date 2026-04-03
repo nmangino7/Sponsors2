@@ -14,13 +14,28 @@ export async function POST(req: NextRequest) {
     const idx = ALL_DAYS.indexOf(startDay || "Monday");
     const days = [0, 1, 2, 3].map(i => ALL_DAYS[(idx + i) % 7]);
 
-    // Build score summary
+    // Build score summary — pre-formatted so AI preserves the layout
     let scoreSummary = "";
     if (scoreEntries?.length > 0) {
-      const scoreLines = scoreEntries.map((e: { date: string; sponsor: string; platform: string; scoreType: string; score: number; section: string; notes: string }) =>
-        `- ${e.sponsor}: ${e.platform} ${e.scoreType} — ${e.score}%${e.section ? ` (${e.section})` : ""}${e.notes ? ` — ${e.notes}` : ""} [${e.date}]`
-      ).join("\n");
-      scoreSummary = `\n\nSCORE TRACKER DATA (include a "Score Summary" section right after the greeting, before individual sponsor plans):\n${scoreLines}\nFormat this as a quick-reference table at the top of the email so the team can see scores at a glance.`;
+      // Group scores by sponsor
+      const byName: Record<string, typeof scoreEntries> = {};
+      for (const e of scoreEntries) {
+        const key = (e as { sponsor: string }).sponsor || "Unknown";
+        if (!byName[key]) byName[key] = [];
+        byName[key].push(e);
+      }
+
+      let tableBlock = "";
+      for (const [name, entries] of Object.entries(byName)) {
+        tableBlock += `\n  ${name}:\n`;
+        for (const e of entries as { date: string; sponsor: string; platform: string; scoreType: string; score: number; section: string; notes: string }[]) {
+          const sectionStr = e.section ? ` — ${e.section}` : "";
+          const noteStr = e.notes ? ` (${e.notes})` : "";
+          tableBlock += `    • ${e.platform} ${e.scoreType}: ${e.score}%${sectionStr}${noteStr}  [${e.date}]\n`;
+        }
+      }
+
+      scoreSummary = `\n\nSCORE SUMMARY — include this section EXACTLY as formatted below, right after "Hey team," and before individual sponsor plans. Copy this layout directly into the email:\n\n--- SCORE SNAPSHOT ---${tableBlock}--- END SCORES ---\n\nDo NOT reformat, rearrange, or turn the score snapshot into a different layout. Preserve the grouping by sponsor name, the bullet points, and the exact spacing shown above.`;
     }
 
     const sponsorBlocks = sponsors
