@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 interface Sponsor {
   name: string;
   exam: string;
+  examDate: string;
   status: string;
   issues: string;
   actions: string[];
@@ -20,6 +21,7 @@ interface UploadedFile {
 interface AiSuggestion {
   name: string;
   exam: string;
+  examDate: string;
   status: string;
   issues: string;
   actions: string[][];
@@ -49,6 +51,7 @@ const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 const emptySponsor = (): Sponsor => ({
   name: "",
   exam: "SIE",
+  examDate: "",
   status: "",
   issues: "",
   actions: ["", "", "", ""],
@@ -117,7 +120,7 @@ export default function Home() {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const results: UploadedFile[] = [];
-    const maxPages = Math.min(pdf.numPages, 30);
+    const maxPages = Math.min(pdf.numPages, 40);
     for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale: 1.5 });
@@ -131,8 +134,8 @@ export default function Home() {
       const base64 = dataUrl.split(",")[1];
       results.push({ name: `${file.name} (page ${i})`, type: "image/jpeg", base64 });
     }
-    if (pdf.numPages > 30) {
-      setError(`PDF has ${pdf.numPages} pages — only first 30 were processed.`);
+    if (pdf.numPages > 40) {
+      setError(`PDF has ${pdf.numPages} pages — only first 40 were processed.`);
     }
     return results;
   };
@@ -209,6 +212,7 @@ export default function Home() {
         }
         setAiSuggestions({
           name: s.name || parserName, exam: s.exam || parserExam,
+          examDate: s.examDate || "",
           status: s.status || "", issues: s.issues || "",
           actions: normalizedActions, dmNeeds: s.dmNeeds || "",
         });
@@ -292,6 +296,7 @@ export default function Home() {
     if (!aiSuggestions) return;
     const sponsor: Sponsor = {
       name: aiSuggestions.name, exam: aiSuggestions.exam,
+      examDate: aiSuggestions.examDate || "",
       status: suggestionChecks.status ? aiSuggestions.status : "",
       issues: suggestionChecks.issues ? aiSuggestions.issues : "",
       actions: aiSuggestions.actions.map((dayTasks, i) => {
@@ -480,7 +485,7 @@ export default function Home() {
               <svg className="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
             </div>
             <p className="text-sm text-slate-600 font-medium">Click or drag files here</p>
-            <p className="text-xs text-slate-400 mt-1">PNG, JPG, PDF — up to 30MB per file</p>
+            <p className="text-xs text-slate-400 mt-1">PNG, JPG, PDF — up to 40 pages per PDF, 30MB per file</p>
           </div>
           <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf" onChange={e => handleFileUpload(e.target.files)} className="hidden" />
           {uploadedFiles.length > 0 && (
@@ -536,6 +541,15 @@ export default function Home() {
             </button>
           </div>
           <p className="text-xs text-slate-400 mb-5 bg-slate-50/80 rounded-lg px-3 py-2">Edit text directly, check/uncheck to include, add your own tasks. Click &quot;Add to Action Plan&quot; when done.</p>
+
+          {/* Exam Date */}
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Exam Date</span>
+            <input type="date" value={aiSuggestions.examDate}
+              onChange={e => setAiSuggestions(prev => prev ? { ...prev, examDate: e.target.value } : prev)}
+              className="border border-slate-200/60 rounded-xl px-4 py-2.5 text-sm bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+            <span className="text-xs text-slate-400">{aiSuggestions.examDate ? "Pulled from the report — used to set the book deadline." : "Add the test date so the plan can set a book deadline."}</span>
+          </div>
 
           {/* Status */}
           <div className={`mb-5 p-5 rounded-2xl border transition-all duration-300 ${suggestionChecks.status ? "bg-indigo-50/40 border-indigo-200/60 shadow-sm" : "bg-slate-50/50 border-slate-200/40 opacity-60"}`}>
@@ -799,6 +813,13 @@ export default function Home() {
                     <option value="LAH">LAH</option>
                     <option value="VA">VA</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Exam Date</label>
+                  <input type="date" value={sponsor.examDate}
+                    onChange={e => updateSponsor(si, "examDate", e.target.value)}
+                    className="w-full border border-slate-200/60 rounded-xl px-4 py-3 text-sm bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
+                  <p className="text-[11px] text-slate-400 mt-1">Sets the &quot;book done 5&ndash;7 days before&quot; deadline.</p>
                 </div>
               </div>
 
