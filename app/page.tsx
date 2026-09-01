@@ -9,6 +9,13 @@ interface Sponsor {
   issues: string;
   actions: string[];
   dmNeeds: string;
+  pagesRead?: number | null;
+  pagesTotal?: number | null;
+  readingTimeLeft?: string;
+  readingTimeHours?: number | null;
+  quizTimeHours?: number | null;
+  currentChapter?: string;
+  achievableStatus?: string;
 }
 
 interface UploadedFile {
@@ -26,6 +33,13 @@ interface AiSuggestion {
   issues: string;
   actions: string[][];
   dmNeeds: string;
+  pagesRead?: number | null;
+  pagesTotal?: number | null;
+  readingTimeLeft?: string;
+  readingTimeHours?: number | null;
+  quizTimeHours?: number | null;
+  currentChapter?: string;
+  achievableStatus?: string;
 }
 
 interface SuggestionChecks {
@@ -121,16 +135,21 @@ export default function Home() {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const results: UploadedFile[] = [];
     const maxPages = Math.min(pdf.numPages, 40);
+    // Keep pages small: vision token cost scales with image area, so clamp the
+    // long edge instead of rendering at a fixed high scale.
+    const MAX_PAGE_EDGE_PX = 1100;
     for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.5 });
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(MAX_PAGE_EDGE_PX / Math.max(base.width, base.height), 1.5);
+      const viewport = page.getViewport({ scale });
       const canvas = document.createElement("canvas");
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext("2d")!;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (page.render({ canvasContext: ctx, viewport } as any)).promise;
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       const base64 = dataUrl.split(",")[1];
       results.push({ name: `${file.name} (page ${i})`, type: "image/jpeg", base64 });
     }
@@ -203,7 +222,7 @@ export default function Home() {
         body: JSON.stringify({ notes, startDay, sponsorName: parserName, exam: parserExam, images, scoreEntries: scoreEntries.filter(s => !parserName.trim() || s.sponsor.toLowerCase().includes(parserName.toLowerCase())) }),
       });
       const data = await res.json();
-      if (data.error) { setError(`AI Error: ${data.error}`); setParsing(false); return; }
+      if (data.error) { setError(data.error); setParsing(false); return; }
       if (data.sponsors?.length > 0) {
         const s = data.sponsors[0];
         let normalizedActions: string[][] = [[], [], [], []];
@@ -213,6 +232,13 @@ export default function Home() {
         setAiSuggestions({
           name: s.name || parserName, exam: s.exam || parserExam,
           examDate: s.examDate || "",
+          pagesRead: s.pagesRead ?? null,
+          pagesTotal: s.pagesTotal ?? null,
+          readingTimeLeft: s.readingTimeLeft || "",
+          readingTimeHours: s.readingTimeHours ?? null,
+          quizTimeHours: s.quizTimeHours ?? null,
+          currentChapter: s.currentChapter || "",
+          achievableStatus: s.achievableStatus || "",
           status: s.status || "", issues: s.issues || "",
           actions: normalizedActions, dmNeeds: s.dmNeeds || "",
         });
@@ -297,6 +323,13 @@ export default function Home() {
     const sponsor: Sponsor = {
       name: aiSuggestions.name, exam: aiSuggestions.exam,
       examDate: aiSuggestions.examDate || "",
+      pagesRead: aiSuggestions.pagesRead ?? null,
+      pagesTotal: aiSuggestions.pagesTotal ?? null,
+      readingTimeLeft: aiSuggestions.readingTimeLeft || "",
+      readingTimeHours: aiSuggestions.readingTimeHours ?? null,
+      quizTimeHours: aiSuggestions.quizTimeHours ?? null,
+      currentChapter: aiSuggestions.currentChapter || "",
+      achievableStatus: aiSuggestions.achievableStatus || "",
       status: suggestionChecks.status ? aiSuggestions.status : "",
       issues: suggestionChecks.issues ? aiSuggestions.issues : "",
       actions: aiSuggestions.actions.map((dayTasks, i) => {
@@ -323,7 +356,7 @@ export default function Home() {
         body: JSON.stringify({ startDay, date, sponsors, scoreEntries }),
       });
       const data = await res.json();
-      if (data.error) setError(`Email generation error: ${data.error}`);
+      if (data.error) setError(data.error);
       else setGeneratedEmail(data.email);
     } catch (e) {
       setError(`Failed to generate email: ${e instanceof Error ? e.message : "Unknown error"}`);
@@ -350,7 +383,7 @@ export default function Home() {
           body: JSON.stringify({ startDay, date, sponsor }),
         });
         const data = await res.json();
-        if (data.error) { setError(`Sponsor email error: ${data.error}`); break; }
+        if (data.error) { setError(data.error); break; }
         results.push({ name: sponsor.name, email: data.email });
       }
       setGeneratedSponsorEmails(results);
