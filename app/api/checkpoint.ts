@@ -6,7 +6,7 @@ import type { ReportData } from "./report-extract.ts";
 import type { PaceFacts } from "./pace.ts";
 import type { Readiness } from "./readiness.ts";
 
-export type CheckpointMetric = "pages_read" | "timed_full_lengths" | "active_days" | "result_reported";
+export type CheckpointMetric = "pages_read" | "timed_full_lengths" | "active_days" | "result_reported" | "exam_scheduled";
 
 export interface Checkpoint {
   metric: CheckpointMetric;
@@ -61,6 +61,14 @@ export function buildCheckpoint({ report, pace, readiness, today }: BuildInput):
     };
   }
 
+  // The result is on file but the exam date is behind us: the promise is the next date, booked.
+  if (readiness.daysToExam !== null && readiness.daysToExam < 0) {
+    return {
+      metric: "exam_scheduled", createdOn: today, due, baseline: 0, target: 1, minScore: null,
+      text: `Reply with your next exam date — booked — by ${when}.`,
+    };
+  }
+
   // Gone quiet: the next promise is just showing up.
   if (readiness.primaryMode === "dormant" || readiness.primaryMode === "not_started") {
     return {
@@ -108,7 +116,11 @@ export function evaluateCheckpoint(cp: Checkpoint, { report, readiness, today }:
   let progressed: boolean;
   let hit: boolean;
 
-  if (cp.metric === "result_reported") {
+  if (cp.metric === "exam_scheduled") {
+    actual = readiness.daysToExam !== null && readiness.daysToExam >= 0 ? 1 : 0;
+    progressed = false;
+    hit = actual >= 1;
+  } else if (cp.metric === "result_reported") {
     // Kept once the result is no longer missing: a real sit was recorded (or the date was corrected).
     actual = readiness.failureModes.includes("result_missing") ? 0 : 1;
     progressed = false;
@@ -134,9 +146,14 @@ export function evaluateCheckpoint(cp: Checkpoint, { report, readiness, today }:
   const shortBy = Math.max(0, needed - actual);
   const status: CheckpointResult["status"] = hit ? "HIT" : today < cp.due ? "PENDING" : progressed ? "PARTIAL" : "MISSED";
 
-  const unit = cp.metric === "pages_read" ? "pages" : cp.metric === "active_days" ? "study days" : cp.metric === "result_reported" ? "exam result" : `timed exams at ${cp.minScore}%+`;
+  const unit = cp.metric === "pages_read" ? "pages" : cp.metric === "active_days" ? "study days" : cp.metric === "result_reported" ? "exam result" : cp.metric === "exam_scheduled" ? "exam date" : `timed exams at ${cp.minScore}%+`;
   const shown = cp.metric === "pages_read" ? `${actual}${report.pagesTotal ? `/${report.pagesTotal}` : ""}` : `${actual}`;
-  const verdict = cp.metric === "result_reported" ? {
+  const verdict = cp.metric === "exam_scheduled" ? {
+    HIT: "HIT — the next exam date is on file.",
+    PENDING: `not due yet (${shortDate(cp.due)}) — no new exam date yet.`,
+    PARTIAL: "MISSED — still no new exam date.",
+    MISSED: "MISSED — still no new exam date.",
+  }[status] : cp.metric === "result_reported" ? {
     HIT: "HIT — the result is on file.",
     PENDING: `not due yet (${shortDate(cp.due)}) — still no result on file.`,
     PARTIAL: "MISSED — still no result on file.",

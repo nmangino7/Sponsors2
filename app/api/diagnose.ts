@@ -159,6 +159,19 @@ export function formatAllFacts(d: Diagnosis, audience: "sponsor" | "team"): stri
     formatReadinessFacts(d.readiness, audience),
     formatCheckpointFacts(d.lastResult, d.streak, d.next, audience),
   ];
+  const r = d.readiness;
+  const sit = r.lastSit;
+  if (sit && (!d.examDate || d.examDate <= sit.date)) {
+    // The newest real exam is the latest event and no later exam date is set yet.
+    parts.push(sit.outcome === "PASS"
+      ? `REAL EXAM: PASSED ${sit.examType} on ${sit.date}. Open with congratulations, then lock in the next exam — set its date now (momentum drops right after a pass).`
+      : sit.outcome === "FAIL"
+        ? `REAL EXAM: FAILED ${sit.examType} on ${sit.date}. Debrief within a day, build the plan from the weakest sections of their score report, and get the retake date set within 48 hours.`
+        : `REAL EXAM: ${sit.examType} on ${sit.date}, result pending — ask for the score report.`);
+  }
+  if (audience === "team" && r.daysToExam !== null && r.daysToExam >= 0 && r.daysToExam <= 7 && !r.goldStandard.met) {
+    parts.push(`GO/NO-GO DECISION NEEDED (team only): exam in ${r.daysToExam} day(s) and the gold standard is NOT met (${r.goldStandard.gaps.map(g => g.text).join("; ")}). The owner makes the call today and relays it to the sponsor the same day — never let a no-go go unsent.`);
+  }
   if (audience === "sponsor") {
     parts.push(d.report.readiness !== null
       ? `ACHIEVABLE'S OWN READINESS METER: ${d.report.readiness}% — Achievable's number, not ours. Quote it on the "ACHIEVABLE READINESS" line.`
@@ -183,7 +196,9 @@ export function diagnosisSummary(d: Diagnosis) {
     neverTested: r.neverTested,
     readiness: { base: r.base, calibrated: r.calibrated, published: r.published, calibrationReason: r.calibrationReason },
     goldStandard: { met: r.goldStandard.met, gaps: r.goldStandard.gaps.map(g => g.text) },
-    flags: { rushing: r.rushing, bankBurnout: r.bankBurnout, bankExposure: r.bankExposure, speedRatio: r.speedRatio },
+    flags: { rushing: r.rushing, bankBurnout: r.bankBurnout, bankExposure: r.bankExposure, speedRatio: r.speedRatio, untimed: r.untimed.length },
+    daysToExam: r.daysToExam,
+    goNoGo: r.daysToExam !== null && r.daysToExam >= 0 && r.daysToExam <= 7 && !r.goldStandard.met,
     darkDays: r.darkDays,
     last4AvgMin: r.last4AvgMin,
     pace: {

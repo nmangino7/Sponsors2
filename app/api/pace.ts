@@ -271,7 +271,7 @@ export function formatPaceFacts(p: PaceFacts): string {
   }
 
   if (p.examPassed) {
-    L.push(`- EXAM DATE ${p.examDate} HAS PASSED. No reading quota and no study plan until we know the result — see READINESS FACTS.`);
+    L.push(`- EXAM DATE ${p.examDate} HAS PASSED. No reading quota or study plan against that date — see READINESS FACTS for the result and the next step.`);
     return L.join("\n");
   }
 

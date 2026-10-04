@@ -148,7 +148,7 @@ EXAM (TEST) DATE: ${examDate || sponsor?.examDate || extracted?.targetDate || "[
 ${prelimFacts ? `\n${prelimFacts}\n\nThe facts above are computed from the report and this sponsor's history — use them; don't re-derive the phase or the quota.` : ""}
 ${extracted ? `\nACHIEVABLE REPORT TEXT (already parsed; use it for chapter/section names and weak topics):\n${trimForModel(reportText)}` : ""}
 ${notes ? `\nTRACKER NOTES (newest first):\n${notes}` : ""}
-${images?.length > 0 ? `\nSCREENSHOTS ATTACHED: read every number. Kaplan QBank screenshots matter most — capture Total Questions, Answered, Average Score, and every named sim with its score, date and minutes used/allowed.` : ""}
+${images?.length > 0 ? `\nSCREENSHOTS ATTACHED: read every number. Kaplan QBank screenshots matter most — capture Total Questions, Answered, Average Score, and every named sim with its score, date and minutes used/allowed. Kaplan logins are SHARED: count only sims labelled for THIS sponsor; skip attempts labelled with another person's name or a staff label (e.g. "Tay").` : ""}
 ${scoreContext}
 
 Return ONLY valid JSON (no markdown, no code blocks):

@@ -9,6 +9,7 @@ import type { PaceFacts } from "./pace.ts";
 export const CUT_SCORES: Record<string, number> = { SIE: 70, "63": 72, "65": 72, "66": 73, "7": 72, LAH: 70 };
 export const BANK_BURNOUT_EXPOSURE = 0.7; // above this, sims measure recall of seen questions
 export const FAST_FINISH_RATIO = 0.6; // minutes used / allowed below this = rushing
+export const UNTIMED_RATIO = 1.1; // used / allowed above this = taken off the clock (paused, multiple sittings)
 const QUIZ_HAIRCUT = 12; // untimed quiz accuracy over-reads exam conditions
 const READY_BAR = 80;
 
@@ -127,6 +128,9 @@ export interface Readiness {
   dotReason: string;
   goldStandard: { met: boolean; qualifying: number; needed: number; gaps: GoldGap[] };
   calibrationReason: string | null;
+  untimed: TimedAttempt[]; // full exams that ran past the clock — shown, never counted
+  daysToExam: number | null; // negative once the exam date has passed
+  lastSit: RealSit | null; // newest real exam, any exam type
 }
 
 const DAY = 86400000;
@@ -173,8 +177,13 @@ function timedAttempts(report: ReportData, kaplan: KaplanData | null | undefined
 /** Trailing-3 timed full-length average using only exams dated on or before `onOrBefore` —
  *  what the practice evidence said going into a real exam. Null when there were none. */
 export function trailingAverageAsOf(report: ReportData, kaplan: KaplanData | null | undefined, onOrBefore: string): number | null {
-  const prior = timedAttempts(report, kaplan).filter(t => t.date !== null && t.date <= onOrBefore).slice(0, 3);
+  const prior = timedAttempts(report, kaplan).filter(t => !isUntimed(t) && t.date !== null && t.date <= onOrBefore).slice(0, 3);
   return prior.length ? avg(prior.map(t => t.score)) : null;
+}
+
+/** Ran past the clock (e.g. 316 of 105 min): an open-book score, not a timed full-length. */
+function isUntimed(t: TimedAttempt): boolean {
+  return t.speedRatio !== null && t.speedRatio > UNTIMED_RATIO;
 }
 
 function lastActive(daily: DailyStudy[]): string | null {
@@ -207,7 +216,14 @@ function bingeAndVanish(daily: DailyStudy[], today: string): boolean {
   return false;
 }
 
-const UNPAID = /\b(hasn'?t|has not|didn'?t|did not|not yet|never)\s+(bought|purchased|paid)\b|\bunpaid\b|\bmaterials?\s+(not|un)\s*paid\b|\bpayment\s+(pending|outstanding|missing)\b|\bcan'?t afford\b/i;
+const UNPAID = new RegExp([
+  String.raw`\b(hasn'?t|has not|didn'?t|did not|not yet|never)\s+(bought|purchased|paid)\b`,
+  String.raw`\bunpaid\b`, String.raw`\bmaterials?\s+(not|un)\s*paid\b`, String.raw`\bpayment\s+(pending|outstanding|missing)\b`,
+  String.raw`\bcan'?t afford\b`,
+  // phrasings seen in the team's notes: "unable to purchase study materials", "waiting to be paid", "doesn't have $50"
+  String.raw`\b(unable to|can'?t|cannot)\s+(purchase|buy|pay)\b`, String.raw`\bwaiting\s+(to\s+(be|get)\s+paid|on\s+(a\s+|his\s+|her\s+|their\s+)?pay(check)?)\b`,
+  String.raw`\b(doesn'?t|does not|don'?t)\s+have\s+(the\s+)?(\$\s?\d+|money|funds)\b`,
+].join("|"), "i");
 
 export function assessReadiness(input: ReadinessInput): Readiness {
   const { report, pace } = input;
@@ -216,7 +232,9 @@ export function assessReadiness(input: ReadinessInput): Readiness {
   const today = input.today ?? report.reportDate ?? new Date().toISOString().slice(0, 10);
   const examDate = input.examDate ?? report.targetDate ?? null;
 
-  const timed = timedAttempts(report, input.kaplan);
+  const allFull = timedAttempts(report, input.kaplan);
+  const untimed = allFull.filter(isUntimed);
+  const timed = allFull.filter(t => !isUntimed(t));
   const last3 = timed.slice(0, 3);
   const trailing3 = avg(last3.map(t => t.score));
   const neverTested = timed.length === 0;
@@ -388,6 +406,9 @@ export function assessReadiness(input: ReadinessInput): Readiness {
     dotReason,
     goldStandard,
     calibrationReason,
+    untimed,
+    daysToExam: examDate ? daysBetween(today, examDate) : null,
+    lastSit: [...(input.realSits ?? [])].sort((a, b) => b.date.localeCompare(a.date))[0] ?? null,
   };
 }
 
@@ -401,6 +422,10 @@ export function formatReadinessFacts(r: Readiness, audience: "sponsor" | "team")
     L.push("- NEVER TESTED: zero timed full-length exams. Do NOT quote OUR readiness score or pass odds (Achievable's own meter is fine). The real exam is unproven.");
   } else {
     L.push(`- Last ${Math.min(3, r.timed.length)} timed full-lengths (newest first): ${r.timed.slice(0, 3).map(t => `${t.name} ${t.score}%${t.date ? ` (${t.date})` : ""}`).join("; ")}. Trailing average ${r.trailing3}% (${r.distanceFromCut! >= 0 ? "+" : ""}${r.distanceFromCut} vs cut).`);
+  }
+  if (r.untimed.length) {
+    const eg = r.untimed[0];
+    L.push(`- UNTIMED: ${r.untimed.length} full exam(s) ran past the clock (e.g. ${eg.name} ${eg.score}% at ${Math.round((eg.speedRatio ?? 0) * 100)}% of the allowed time). They are NOT counted toward readiness — say so, and have them retake timed, in one sitting.`);
   }
   if (r.rushing) L.push(`- RUSHING: they finish full exams in ~${Math.round((r.speedRatio ?? 0) * 100)}% of the allowed time. Practice scores taken this fast over-read the real exam — require full use of the clock.`);
   if (r.bankBurnout) L.push(`- BANK BURNOUT: ${Math.round((r.bankExposure ?? 0) * 100)}% of the Kaplan bank already answered. Above 70%, sims measure recall of seen questions — switch to fresh questions.`);

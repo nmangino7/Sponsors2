@@ -77,7 +77,9 @@ interface Diagnosis {
   neverTested: boolean;
   readiness: { base: number | null; calibrated: number | null; published: number | null; calibrationReason: string | null };
   goldStandard: { met: boolean; gaps: string[] };
-  flags: { rushing: boolean; bankBurnout: boolean; bankExposure: number | null; speedRatio: number | null };
+  flags: { rushing: boolean; bankBurnout: boolean; bankExposure: number | null; speedRatio: number | null; untimed: number };
+  daysToExam: number | null;
+  goNoGo: boolean;
   darkDays: number | null;
   last4AvgMin: number | null;
   pace: {
@@ -176,6 +178,11 @@ function DiagnosisPanel({ d }: { d: Diagnosis }) {
         <Dot dot={d.dot} title={d.dotReason} />
         <span className="font-bold text-slate-800">Phase {d.phase} — {d.phaseName}</span>
         <span className="text-xs text-slate-500">{d.dotReason}</span>
+        {d.goNoGo && (
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+            Exam in {d.daysToExam} day{d.daysToExam === 1 ? "" : "s"} — go/no-go call needed today
+          </span>
+        )}
       </div>
 
       {d.failureModes.length > 0 && (
@@ -216,8 +223,9 @@ function DiagnosisPanel({ d }: { d: Diagnosis }) {
             </div>
           )}
           {r.calibrationReason && <div className="text-xs text-slate-500 mt-1">{r.calibrationReason}</div>}
-          {(d.flags.rushing || d.flags.bankBurnout) && (
+          {(d.flags.rushing || d.flags.bankBurnout || d.flags.untimed > 0) && (
             <div className="flex flex-wrap gap-2 mt-2">
+              {d.flags.untimed > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{d.flags.untimed} untimed full exam{d.flags.untimed === 1 ? "" : "s"} (not counted)</span>}
               {d.flags.rushing && <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">Rushing{d.flags.speedRatio != null ? ` (${Math.round(d.flags.speedRatio * 100)}% of time used)` : ""}</span>}
               {d.flags.bankBurnout && <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">Bank burnout{d.flags.bankExposure != null ? ` (${Math.round(d.flags.bankExposure * 100)}% seen)` : ""}</span>}
             </div>
@@ -712,7 +720,11 @@ export default function Home() {
   const namedSponsorCount = sponsors.filter(s => s.name.trim()).length;
 
   const q = sponsorQuery.trim().toLowerCase();
-  const visibleSponsors = q ? sponsorList.filter(s => s.name.toLowerCase().includes(q)) : sponsorList;
+  const DOT_RANK: Record<string, number> = { red: 0, grey: 1, green: 2 };
+  const visibleSponsors = (q ? sponsorList.filter(s => s.name.toLowerCase().includes(q)) : sponsorList)
+    .slice()
+    .sort((a, b) => (DOT_RANK[a.dot ?? "grey"] ?? 1) - (DOT_RANK[b.dot ?? "grey"] ?? 1)
+      || (a.examDate ?? "9999").localeCompare(b.examDate ?? "9999"));
 
   if (!whoami) {
     return <div className="min-h-screen flex items-center justify-center"><span className="loading-dots"><span /><span /><span /></span></div>;
@@ -827,7 +839,7 @@ export default function Home() {
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm4 4h8m-8 4h5" /></svg>
         </div>
         <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Sponsor Memory</h2>
-        <span className="text-xs text-slate-400">{sponsorList.length} remembered</span>
+        <span className="text-xs text-slate-400">{sponsorList.length} remembered · red first, then soonest exam</span>
       </div>
 
       <div className="glass-card rounded-2xl shadow-lg p-6 mb-8 animate-fade-in">

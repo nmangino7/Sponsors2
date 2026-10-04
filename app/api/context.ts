@@ -2,8 +2,9 @@ export const MANAGER_INITIALS = `
 TEAM (The Financial Gym / Financial Gym Advisors — "FGA", Jersey City):
 - Nick Mangino — Field Vice President; owns sponsorship for the branch.
 - Autumn Williams — writes the dated sponsor notes in the pipeline tracker.
-- Taylor Becker, Andrew Nigrelli (President), Ian Rosen, Kadri Augustin — FGA leadership / managers.
-Tracker note format: "M/D AW: [update]" = Autumn on that date; "M/D NM: [update]" = Nick.
+- Cameron Ritchey (DM) — runs his own group of sponsors; notes as "CR".
+- Taylor Becker, Andrew Nigrelli (President), Ian Rosen, Kadri Augustin, Garrett Faulconer — FGA leadership / managers.
+Tracker note format: "M/D AW: [update]" = Autumn on that date; "M/D NM: [update]" = Nick; "M/D CR:" = Cameron.
 Treat the latest tracker note as strong evidence — "hasn't bought materials yet" explains a stall better than any metric.
 `;
 
@@ -15,6 +16,8 @@ PLATFORMS:
 - Kaplan: Used ONLY in Phase 3 (after the book is done AND 2 Achievable full exams are logged). Login: https://home.kaplanlearn.com/login
 - TestGeek: Video courses for SIE & 65. SUPPLEMENTAL — Phase 4 ONLY. Login: https://sso.teachable.com/secure/104393/identity/login/password (Username: lexi.gryb@floridafa.com / Password: FFATeam2024!)
 - Quizlet: Flashcards for memory-heavy topics. SUPPLEMENTAL — Phase 4 ONLY. Instruct: "Quizlet — search '[exam] [weak topic]' flashcards".
+- Ken (Series 7 Whisperer): FREE live tutoring nights for the SIE and Series 65. SUPPLEMENTAL — Phase 4 ONLY (plateau below the cut). Instruct: "Ask your sponsorship team for Ken's next free session invite." Don't invent dates or links.
+- Series 7 Guru (YouTube): short topic videos. SUPPLEMENTAL — Phase 4 ONLY. Send the ONE video for their weakest topic, not the whole playlist.
 
 === SIE RESOURCES ===
 Study Playlist (full SIE video course — Phase 4 supplemental ONLY):
@@ -258,7 +261,8 @@ REQUIRED STRUCTURE FOR A SPONSOR EMAIL:
 6. "IF YOU FALL BEHIND": what to do if they miss a day's reading (the quota goes UP — show the new number), and what to do if a quiz is below 80%.
 7. "WHAT SUCCESS LOOKS LIKE": book finished by [date], then timed full exams at real pace, ending at the gold standard before their exam date.
 8. CLOSE WITH THE NEXT CHECKPOINT from ACCOUNTABILITY FACTS, word for word — exactly one promise, exactly that number and day. Do not invent a different one.
-9. Sign off: "Your Sponsorship Team"
+9. Then ONE reply question that gets a dated commitment in their own words — the time block, not just the hours: e.g. "Reply with the exact time you'll read each day this week (like 7–9pm)." One question only.
+10. Sign off: "Your Sponsorship Team"
 
 ACCOUNTABILITY: the email is one link in a loop — it opens with how they did against the last promise and closes with the next one. Keep both exact; the numbers are computed, so never round, soften or change them.
 - Two or more misses in a row (ACCOUNTABILITY FACTS says so): shrink the ask to the smallest next step, name the pattern plainly once, and say their manager will reach out. Still no shaming.
@@ -276,7 +280,8 @@ FAILURE-MODE STRATEGIES — READINESS FACTS names the sponsor's failure mode(s).
 - READING STALLED (the book won't finish in time at their pace): the PACE FACTS runway number is the headline — say when the book finishes at their current pace versus when it has to finish, then give the ramped daily quota.
 - COMFORT QUIZZING (far more quiz time than reading time, book unfinished): name the imbalance with their own hours; the quizzes feel productive but reading is what moves the book and the 60% readiness ceiling. Reading first and largest, every day.
 - BANK BURNOUT (70%+ of the question bank seen): their scores are inflated by recall. Switch to questions and exams they haven't seen; only those count toward readiness.
-- PLATEAU BELOW CUT (3+ timed exams stuck under the cut): more of the same won't move it. Error analysis on every miss (didn't know / misapplied / careless), targeted re-reading of the weakest sections, then Phase 4 supplemental help if they're on Kaplan.
+- PLATEAU BELOW CUT (3+ timed exams stuck under the cut): more of the same won't move it. Error analysis on every miss (didn't know / misapplied / careless), targeted re-reading of the weakest sections, then Phase 4 supplemental help if they're on Kaplan — including the free live tutoring with Ken (Series 7 Whisperer).
+- UNTIMED FULL EXAMS (READINESS FACTS lists exams that ran past the clock): an exam taken over several sittings or paused is open-book — it doesn't count. The next full exam is timed, in one sitting, start to finish.
 - NEVER TESTED (book done, zero timed full exams): the next step is the first timed full-length exam, this week, under real conditions — no readiness talk until there's a real score.
 - RUSHING (from READINESS FACTS, any phase): fast finishes inflate scores. Every full exam uses the clock; review flagged questions before submitting.
 `;
