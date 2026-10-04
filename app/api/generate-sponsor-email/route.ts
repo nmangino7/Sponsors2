@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { STUDY_RESOURCES, STUDY_METHODOLOGY, PHASE_DETECTION, SPECIFICITY_INSTRUCTIONS, SPONSOR_EMAIL_TONE, FAILURE_MODE_PLAYBOOK } from "../context";
 import { MODEL_EMAIL, createMessage, extractText, friendlyError, logUsage, withRetry } from "../anthropic";
 import { computePace, formatPaceFacts, parseDurationToMinutes } from "../pace";
-import { formatAllFacts, loadDiagnosis, syncSponsorFromCard } from "../diagnose";
+import { formatAllFacts, loadDiagnosis, syncSponsorFromCard, reportAgeDays, STALE_REPORT_DAYS } from "../diagnose";
 import { getStore } from "../store";
 import { requireUser } from "../guard";
 
@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
     // Without it (typed-in sponsor, never uploaded): pace from the fields on hand.
     await syncSponsorFromCard(store, { sponsorId: sponsor.sponsorId, exam: sponsor.exam, examDate: examDate || sponsor.examDate });
     const d = sponsor.sponsorId ? await loadDiagnosis(store, sponsor.sponsorId) : null;
+    if (d && reportAgeDays(d) > STALE_REPORT_DAYS) {
+      return NextResponse.json({
+        email: "",
+        error: `${d.sponsor.name}'s latest Achievable report is from ${d.today} (${reportAgeDays(d)} days old). Upload a fresh report first, so the promise is set — and later graded — on current numbers.`,
+      }, { status: 409 });
+    }
+    const resultMissing = d?.readiness.primaryMode === "result_missing";
     const facts = d
       ? formatAllFacts(d, "sponsor")
       : formatPaceFacts(computePace({
@@ -70,7 +77,9 @@ WHAT WE KNOW (upgrade everything to be hyper-specific, time-estimated, and phase
 - Draft daily tasks:
 ${actionLines}
 
-WRITE THE EMAIL using the REQUIRED STRUCTURE (opener with the last checkpoint's result → status block → "BEST GUIDANCE — DO THESE FIRST" → day-by-day plan → "IF YOU FALL BEHIND" → "WHAT SUCCESS LOOKS LIKE" → close with the NEXT CHECKPOINT word for word → "Your Sponsorship Team").
+${resultMissing
+  ? `THEIR EXAM DATE HAS PASSED AND NO RESULT IS ON FILE. Write a SHORT email instead of the usual structure: the first line asks how the exam went and asks them to send the score report (pass or fail). No study plan, no quota, no day-by-day tasks until we know. Close with the NEXT CHECKPOINT word for word, then "Your Sponsorship Team".`
+  : `WRITE THE EMAIL using the REQUIRED STRUCTURE (opener with the last checkpoint's result → status block → "BEST GUIDANCE — DO THESE FIRST" → day-by-day plan → "IF YOU FALL BEHIND" → "WHAT SUCCESS LOOKS LIKE" → close with the NEXT CHECKPOINT word for word → "Your Sponsorship Team").`}
 
 HARD REQUIREMENTS:
 - Use the PHASE and failure mode from READINESS FACTS and the matching strategy. Phase 1: lead with the reading quota, reading first and biggest every day, no Kaplan/videos/Quizlet, no on-demand Quiz Bank drilling.

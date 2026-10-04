@@ -65,6 +65,8 @@ export interface ReportData {
   careerQuestions: number | null;
   activeDays: number | null;
   firstActivity: string | null; // first day on the platform ("Accessed from"), else earliest daily entry
+  lastAccess: string | null; // last day on the platform ("Accessed from X to Y")
+  studyWindowEmpty: boolean; // the 1-month STUDY TIME BREAKDOWN is present but has no study days
   tooFastFlags: number;
   missing: string[];
 }
@@ -192,10 +194,10 @@ function resolveTargetDate(raw: string, reportDate: string | null): string | nul
   const month = MONTHS.indexOf(m[1].toLowerCase());
   if (month < 0) return null;
   const ref = reportDate ? new Date(`${reportDate}T00:00:00Z`) : new Date();
-  let year = ref.getUTCFullYear();
-  // Target dates have no year; one that's well before the report date is next year.
-  const candidate = Date.UTC(year, month, +m[2]);
-  if (candidate < ref.getTime() - 60 * 86400000) year += 1;
+  // Target dates have no year: take the earliest of last/this/next year that isn't more than
+  // ~2 months before the report (so "Dec 28th" on a Jan 4 report is the one that just passed).
+  const y0 = ref.getUTCFullYear();
+  const year = [y0 - 1, y0, y0 + 1].find(y => Date.UTC(y, month, +m[2]) >= ref.getTime() - 60 * 86400000)!;
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(+m[2]).padStart(2, "0")}`;
 }
 
@@ -242,6 +244,8 @@ export function extractReport(rawText: string): ReportData {
     careerQuestions: num(t.match(/QUIZ QUESTIONS\s+Total:\s*(\d+)/)),
     activeDays: num(t.match(/with\s+(\d+)\s+distinct days of activity/)),
     firstActivity: null,
+    lastAccess: (t.match(/Accessed from\s+\d{4}-\d{2}-\d{2}\s+to\s+(\d{4}-\d{2}-\d{2})/) || [])[1] ?? null,
+    studyWindowEmpty: false,
     tooFastFlags: (between(t, "TEXTBOOK PROGRESS").match(/too fast/gi) || []).length,
     missing: [],
   };
@@ -250,6 +254,7 @@ export function extractReport(rawText: string): ReportData {
   data.firstActivity = (t.match(/Accessed from\s+(\d{4}-\d{2}-\d{2})/) || [])[1] ?? data.daily[0]?.date ?? null;
   data.missing = required.filter(k => data[k] === null) as string[];
   if (data.daily.length === 0) data.missing.push("daily");
+  data.studyWindowEmpty = /STUDY TIME BREAKDOWN/.test(t) && !data.daily.some(d => d.totalMin > 0);
   return data;
 }
 
@@ -277,6 +282,6 @@ export function emptyReport(): ReportData {
     studyMin: null, readingMin: null, quizMin: null, examMin: null, pagesRead: null, pagesTotal: null,
     readingMinutesLeft: null, fullLengthCounter: null, readiness: null, targetDate: null, planStatus: null,
     overdueMinutes: null, quiz7d: s(), exam7d: s(), attempts: [], daily: [], careerQuestions: null,
-    activeDays: null, firstActivity: null, tooFastFlags: 0, missing: [],
+    activeDays: null, firstActivity: null, lastAccess: null, studyWindowEmpty: false, tooFastFlags: 0, missing: [],
   };
 }

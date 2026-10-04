@@ -259,7 +259,7 @@ export default function Home() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([emptySponsor()]);
 
   const [parserName, setParserName] = useState("");
-  const [parserExam, setParserExam] = useState("SIE");
+  const [parserExam, setParserExam] = useState(""); // "" = the course on the report, else what's on file
   const [notes, setNotes] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -479,15 +479,20 @@ export default function Home() {
 
   const parseNotes = async () => {
     if (!parserName.trim() && !notes.trim() && uploadedFiles.length === 0 && scoreEntries.length === 0) return;
+    const reports = uploadedFiles.filter(f => f.text);
+    if (reports.length > 1) {
+      setError("Upload one Achievable report at a time — each report is one sponsor on one day. Remove the extra PDFs and run it again.");
+      return;
+    }
     setParsing(true);
     setError("");
     try {
       const images = uploadedFiles.filter(f => !f.text).map(f => ({ base64: f.base64, mediaType: f.type }));
-      const reportText = uploadedFiles.filter(f => f.text).map(f => f.text).join("\n\n");
+      const reportText = reports[0]?.text ?? "";
       const res = await fetch("/api/parse-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes, startDay, sponsorName: parserName, exam: parserExam, images, reportText, sponsorId: parserSponsorId || undefined, scoreEntries: scoreEntries.filter(s => !parserName.trim() || s.sponsor.toLowerCase().includes(parserName.toLowerCase())) }),
+        body: JSON.stringify({ notes, startDay, sponsorName: parserName, exam: parserExam || undefined, images, reportText, sponsorId: parserSponsorId || undefined, scoreEntries: scoreEntries.filter(s => !parserName.trim() || s.sponsor.toLowerCase().includes(parserName.toLowerCase())) }),
       });
       if (res.status === 401 || res.status === 403) { await checkAuth(); setParsing(false); return; }
       const data = await res.json();
@@ -504,7 +509,7 @@ export default function Home() {
         }
         setAiSuggestions({
           sponsorId: s.sponsorId ?? data.sponsorRecord?.id ?? null,
-          name: s.name || parserName, exam: s.exam || parserExam,
+          name: s.name || parserName, exam: s.exam || parserExam || "SIE",
           examDate: s.examDate || "",
           achievableTargetDate: s.achievableTargetDate || "",
           pagesRead: s.pagesRead ?? null,
@@ -637,10 +642,14 @@ export default function Home() {
     setAiSuggestions(null);
     setDiagnosis(null);
     setSponsorRecord(null);
-    setParserName(""); setParserExam("SIE"); setNotes(""); setUploadedFiles([]); setParserSponsorId("");
+    setParserName(""); setParserExam(""); setNotes(""); setUploadedFiles([]); setParserSponsorId("");
   };
 
-  const discardSuggestions = () => { setAiSuggestions(null); setDiagnosis(null); setSponsorRecord(null); setCustomActions(["", "", "", ""]); };
+  const discardSuggestions = () => {
+    setAiSuggestions(null); setDiagnosis(null); setSponsorRecord(null); setCustomActions(["", "", "", ""]);
+    // A discarded upload must not ride along with the next one, or keep pointing at a sponsor.
+    setUploadedFiles([]); setParserSponsorId("");
+  };
 
   const generateEmail = async () => {
     setLoading(true); setError("");
@@ -672,6 +681,7 @@ export default function Home() {
     setLoadingSponsorEmails(true); setError("");
     try {
       const results: { name: string; email: string; checkpoint: string | null }[] = [];
+      const problems: string[] = [];
       for (const sponsor of namedSponsors) {
         const res = await fetch("/api/generate-sponsor-email", {
           method: "POST",
@@ -680,10 +690,11 @@ export default function Home() {
         });
         if (res.status === 401 || res.status === 403) { await checkAuth(); break; }
         const data = await res.json();
-        if (data.error) { setError(data.error); break; }
+        if (data.error) { problems.push(data.error); if (res.status !== 409) break; continue; }
         results.push({ name: sponsor.name, email: data.email, checkpoint: data.checkpoint?.text ?? null });
       }
       setGeneratedSponsorEmails(results);
+      if (problems.length) setError(problems.join(" "));
       loadSponsors();
       if (timeline && namedSponsors.some(s => s.sponsorId === timeline.sponsor.id)) openTimeline(timeline.sponsor.id);
     } catch (e) {
@@ -872,7 +883,7 @@ export default function Home() {
                 </div>
                 <div className="flex gap-4">
                   <button onClick={() => loadIntoPlan(timeline.sponsor)} className="text-sm font-semibold text-emerald-600 hover:text-emerald-800">Add to plan</button>
-                  <button onClick={() => { setParserSponsorId(timeline.sponsor.id); setParserName(timeline.sponsor.name); if (timeline.sponsor.exam) setParserExam(timeline.sponsor.exam); }}
+                  <button onClick={() => { setParserSponsorId(timeline.sponsor.id); setParserName(timeline.sponsor.name); setParserExam(""); }}
                     className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">Upload new report</button>
                   <button onClick={() => setTimeline(null)} className="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
                 </div>
@@ -993,8 +1004,9 @@ export default function Home() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Current Exam</label>
-            <select value={parserExam} onChange={e => setParserExam(e.target.value)}
+            <select value={parserExam} onChange={e => setParserExam(e.target.value)} aria-label="Current exam"
               className="w-full border border-slate-200/60 rounded-xl px-4 py-3 text-sm bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all">
+              <option value="">From report / on file</option>
               <option value="SIE">SIE</option>
               <option value="63">Series 63</option>
               <option value="65">Series 65</option>

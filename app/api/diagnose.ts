@@ -85,6 +85,19 @@ export interface LoadedDiagnosis extends Diagnosis {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A promise set from an old report is already overdue — the sponsor email needs a fresh one. */
+export const STALE_REPORT_DAYS = 3;
+
+/** Days between the latest report and the server's today (UTC). */
+export function reportAgeDays(d: Pick<Diagnosis, "today">, now: Date = new Date()): number {
+  return Math.round((Date.parse(now.toISOString().slice(0, 10)) - Date.parse(d.today)) / 86400000);
+}
+
+/** Did this upload include an Achievable report (vs. only screenshots / notes)? */
+function hasAchievable(r: ReportData): boolean {
+  return r.pagesRead !== null || r.attempts.length > 0 || r.daily.length > 0;
+}
+
 /** The plan card is where the team corrects a sponsor's exam or test date — save those edits
  *  before diagnosing, so the email, the grade and the timeline all use the same date. */
 export async function syncSponsorFromCard(store: Store, card: { sponsorId?: string | null; exam?: string | null; examDate?: string | null }): Promise<void> {
@@ -115,17 +128,23 @@ export async function refreshDiagnosis(store: Store, sponsorId: string): Promise
 export async function loadDiagnosis(store: Store, sponsorId: string): Promise<LoadedDiagnosis | null> {
   const sponsor = await store.getSponsor(sponsorId);
   if (!sponsor) return null;
-  const snaps = await store.snapshots(sponsorId, 10);
+  const snaps = await store.snapshots(sponsorId, 20);
   const current = snaps[0];
   if (!current) return null;
   const [sitRows, noteRows, emails] = await Promise.all([store.realSits(sponsorId), store.notes(sponsorId, 10), store.emails(sponsorId, 20)]);
+  // Uploads are often partial: this week's Achievable PDF without the Kaplan screenshots, or a
+  // Kaplan screenshot alone. Carry each source forward from the newest upload that had it.
+  const reportSnap = hasAchievable(current.data) ? current : snaps.find(s => hasAchievable(s.data)) ?? current;
+  const kaplan = current.kaplan ?? snaps.find(s => s.kaplan)?.kaplan ?? null;
+  // Observed pace compares against the previous report from the SAME course (SIE -> 65 resets pages).
+  const sameCourse = (s: SnapshotRow) => hasAchievable(s.data) && (s.data.course ?? null) === (reportSnap.data.course ?? null);
   const d = computeDiagnosis({
-    report: current.data,
-    kaplan: current.kaplan,
+    report: reportSnap.data,
+    kaplan,
     today: current.reportDate,
-    exam: sponsor.exam ?? current.data.exam,
-    examDate: sponsor.examDate ?? current.data.targetDate,
-    previous: snaps.find(s => s.reportDate < current.reportDate) ?? null,
+    exam: sponsor.exam ?? reportSnap.data.exam,
+    examDate: sponsor.examDate ?? reportSnap.data.targetDate,
+    previous: snaps.find(s => s.reportDate < reportSnap.reportDate && sameCourse(s)) ?? null,
     sits: sitRows,
     notes: noteRows.map(n => n.body),
     emails,
@@ -140,6 +159,11 @@ export function formatAllFacts(d: Diagnosis, audience: "sponsor" | "team"): stri
     formatReadinessFacts(d.readiness, audience),
     formatCheckpointFacts(d.lastResult, d.streak, d.next, audience),
   ];
+  if (audience === "sponsor") {
+    parts.push(d.report.readiness !== null
+      ? `ACHIEVABLE'S OWN READINESS METER: ${d.report.readiness}% — Achievable's number, not ours. Quote it on the "ACHIEVABLE READINESS" line.`
+      : `ACHIEVABLE'S OWN READINESS METER: not on this report — leave the "ACHIEVABLE READINESS" line out.`);
+  }
   if (d.notes.length) {
     parts.push(`LATEST TRACKER NOTES (newest first — strong evidence, often better than the metrics):\n${d.notes.slice(0, 3).map(n => `- ${n}`).join("\n")}`);
   }

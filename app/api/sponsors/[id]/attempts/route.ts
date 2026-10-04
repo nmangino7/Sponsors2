@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "../../../store";
 import { requireUser } from "../../../guard";
 import { friendlyError } from "../../../anthropic";
-import { loadDiagnosis, refreshDiagnosis } from "../../../diagnose";
+import { refreshDiagnosis } from "../../../diagnose";
+import { trailingAverageAsOf } from "../../../readiness";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -25,9 +26,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
     const store = getStore();
     if (!(await store.getSponsor(id))) return NextResponse.json({ error: "Sponsor not found" }, { status: 404 });
-    const d = await loadDiagnosis(store, id);
-    // Prefer timed-exam evidence; fall back to the calibrated composite.
-    const predictedAtSit = d ? d.readiness.trailing3 ?? d.readiness.calibrated : null;
+    // What we'd have predicted going INTO this sit: timed exams dated on or before it (the
+    // practice-exam list is cumulative), else the readiness stamped on the last report before it.
+    // Never evidence from after the sit — a back-filled old FAIL must not borrow today's scores.
+    const snaps = await store.snapshots(id, 50);
+    const latest = snaps[0];
+    const kaplan = snaps.find(x => x.kaplan)?.kaplan ?? null;
+    const priorSnap = snaps.find(x => x.reportDate <= date) ?? null;
+    const predictedAtSit = (latest ? trailingAverageAsOf(latest.data, kaplan, date) : null) ?? priorSnap?.calibrated ?? null;
 
     const sit = await store.addRealSit({ sponsorId: id, examType, date, outcome, score: s, predictedAtSit, createdBy: user.email });
     await refreshDiagnosis(store, id); // calibration and "result missing" change with a real result

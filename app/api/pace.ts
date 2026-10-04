@@ -34,6 +34,8 @@ export interface PaceFacts {
   examDate: string | null;
   bookDeadline: string | null;
   usingFloor: boolean;
+  deadlinePassed: boolean; // even the 5-day floor is behind us
+  examPassed: boolean; // the exam date is before today
   daysToDeadline: number | null;
   requiredMinutesPerDay: number | null;
   requiredPagesPerDay: number | null;
@@ -106,6 +108,8 @@ export function computePace(input: PaceInput): PaceFacts {
   let bookDeadline: string | null = null;
   let daysToDeadline: number | null = null;
   let usingFloor = false;
+  let deadlinePassed = false;
+  let examPassed = false;
   let exam: Date | null = null;
 
   if (input.examDate) {
@@ -121,9 +125,16 @@ export function computePace(input: PaceInput): PaceFacts {
         usingFloor = true;
       }
       let d = daysBetween(today, deadline);
+      examPassed = daysBetween(today, e) < 0;
+      if (d < 0) {
+        // Floor gone too: everything left is due before the exam — spread it over the days
+        // up to the day before test day (at least today).
+        deadlinePassed = true;
+        d = Math.max(1, daysBetween(today, e) - 1);
+      }
       if (d < 1) d = 1; // always at least "today"
       bookDeadline = toISO(deadline);
-      daysToDeadline = d;
+      daysToDeadline = examPassed ? null : d;
     }
   }
 
@@ -219,6 +230,8 @@ export function computePace(input: PaceInput): PaceFacts {
     examDate: input.examDate ?? null,
     bookDeadline,
     usingFloor,
+    deadlinePassed,
+    examPassed,
     daysToDeadline,
     requiredMinutesPerDay,
     requiredPagesPerDay,
@@ -257,10 +270,21 @@ export function formatPaceFacts(p: PaceFacts): string {
     L.push(`- Achievable "Reading time left": ${fmtMins(p.readingMinutesLeft)}.`);
   }
 
+  if (p.examPassed) {
+    L.push(`- EXAM DATE ${p.examDate} HAS PASSED. No reading quota and no study plan until we know the result — see READINESS FACTS.`);
+    return L.join("\n");
+  }
+
   if (p.bookDone) {
     L.push("- THE BOOK IS FINISHED. Do not assign more reading; move to full exams.");
+  } else if (p.bookDeadline && p.daysToDeadline && p.deadlinePassed) {
+    L.push(`- Exam date: ${p.examDate}. BOOK DEADLINE was ${p.bookDeadline} — ALREADY PASSED. Everything left must be read in the ${p.daysToDeadline} day(s) before test day. Say so directly.`);
+    if (p.requiredMinutesPerDay !== null) {
+      const pagesPart = p.requiredPagesPerDay !== null ? ` (about ${p.requiredPagesPerDay} pages/day)` : "";
+      L.push(`- REQUIRED DAILY READING QUOTA: ${fmtMins(p.requiredMinutesPerDay)} per day${pagesPart}. Lead the email with this number and show the math.`);
+    }
   } else if (p.bookDeadline && p.daysToDeadline) {
-    L.push(`- Exam date: ${p.examDate}. BOOK DEADLINE: ${p.bookDeadline} (${p.daysToDeadline} day(s) from today).`);
+    L.push(`- Exam date: ${p.examDate}. BOOK DEADLINE: ${p.bookDeadline} (${p.daysToDeadline} day(s) of reading left).`);
     if (p.usingFloor) {
       L.push("- NOTE: the ideal 2-week-before target has already passed, so this deadline is the 5-day floor. They are late — say so directly.");
     }

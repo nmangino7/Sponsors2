@@ -160,13 +160,21 @@ function ratio(used: number | null, allowed: number | null): number | null {
 
 function timedAttempts(report: ReportData, kaplan: KaplanData | null | undefined): TimedAttempt[] {
   const a: TimedAttempt[] = report.attempts
-    .filter((x: PracticeAttempt) => x.fullLength && x.status !== "DISCARDED")
+    // An abandoned full exam (quit at 12%) is not a timed full-length.
+    .filter((x: PracticeAttempt) => x.fullLength && x.status !== "DISCARDED" && (x.completionPct ?? 100) >= 90)
     .map(x => ({ source: "achievable" as const, name: x.name, score: x.score, date: x.date, speedRatio: ratio(x.minutesUsed, x.minutesAllowed) }));
   const k: TimedAttempt[] = (kaplan?.sims ?? []).map(s => ({
     source: "kaplan" as const, name: s.name, score: s.score, date: s.date, speedRatio: ratio(s.minutesUsed, s.minutesAllowed),
   }));
   // Most recent first; undated entries keep their listed order after dated ones.
   return [...a, ...k].sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""));
+}
+
+/** Trailing-3 timed full-length average using only exams dated on or before `onOrBefore` —
+ *  what the practice evidence said going into a real exam. Null when there were none. */
+export function trailingAverageAsOf(report: ReportData, kaplan: KaplanData | null | undefined, onOrBefore: string): number | null {
+  const prior = timedAttempts(report, kaplan).filter(t => t.date !== null && t.date <= onOrBefore).slice(0, 3);
+  return prior.length ? avg(prior.map(t => t.score)) : null;
 }
 
 function lastActive(daily: DailyStudy[]): string | null {
@@ -224,8 +232,12 @@ export function assessReadiness(input: ReadinessInput): Readiness {
   }
 
   // Cadence / runway (0-100): active recently and on pace.
-  const lastActiveDate = lastActive(report.daily);
-  const darkDays = lastActiveDate ? Math.max(0, daysBetween(lastActiveDate, today)) : null;
+  // Last study day from the daily table; else the activity log's last access; else, if the
+  // 1-month breakdown is there but empty for someone who has studied before, 30+ days dark.
+  const lastActiveDate = lastActive(report.daily) ?? report.lastAccess ?? null;
+  const studiedBefore = (report.studyMin ?? 0) > 0 || (report.pagesRead ?? 0) > 0;
+  const darkDays = lastActiveDate ? Math.max(0, daysBetween(lastActiveDate, today))
+    : report.studyWindowEmpty && studiedBefore ? 30 : null;
   let cadence: number | null = null;
   if (darkDays !== null) {
     cadence = clamp(100 - 15 * Math.max(0, darkDays - 1));
@@ -296,7 +308,8 @@ export function assessReadiness(input: ReadinessInput): Readiness {
 
   // Upgraded gold standard: 3 full exams in the 80s, taken timed at real pace, on fresh
   // questions, with calibrated readiness at the bar. (The Villacres fix.)
-  const qualifying = timed.filter(t => t.score >= READY_BAR && (t.speedRatio === null || t.speedRatio >= FAST_FINISH_RATIO)).length;
+  // Only the 3 most recent count: old 80s don't offset a slide below the cut.
+  const qualifying = last3.filter(t => t.score >= READY_BAR && (t.speedRatio === null || t.speedRatio >= FAST_FINISH_RATIO)).length;
   const gaps: GoldGap[] = [];
   if (qualifying < 3) {
     const t = `${qualifying} of 3 timed full exams in the 80s at real pace`;
@@ -385,7 +398,7 @@ export function formatReadinessFacts(r: Readiness, audience: "sponsor" | "team")
   L.push(`- PHASE ${r.phase} — ${r.phaseName}. Build the plan for this phase only.`);
   L.push(`- Cut score for ${r.exam ?? "this exam"}: ${r.cut}%. Read every score as distance from the cut.`);
   if (r.neverTested) {
-    L.push("- NEVER TESTED: zero timed full-length exams. Do NOT quote any readiness score or pass odds. The real exam is unproven.");
+    L.push("- NEVER TESTED: zero timed full-length exams. Do NOT quote OUR readiness score or pass odds (Achievable's own meter is fine). The real exam is unproven.");
   } else {
     L.push(`- Last ${Math.min(3, r.timed.length)} timed full-lengths (newest first): ${r.timed.slice(0, 3).map(t => `${t.name} ${t.score}%${t.date ? ` (${t.date})` : ""}`).join("; ")}. Trailing average ${r.trailing3}% (${r.distanceFromCut! >= 0 ? "+" : ""}${r.distanceFromCut} vs cut).`);
   }

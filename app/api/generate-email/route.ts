@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { MANAGER_INITIALS, STUDY_RESOURCES, STUDY_METHODOLOGY, PHASE_DETECTION, SPECIFICITY_INSTRUCTIONS, FAILURE_MODE_PLAYBOOK } from "../context";
 import { MODEL_EMAIL, createMessage, extractText, friendlyError, logUsage, withRetry } from "../anthropic";
 import { computePace, formatPaceFacts, parseDurationToMinutes } from "../pace";
-import { formatAllFacts, loadDiagnosis, syncSponsorFromCard } from "../diagnose";
+import { formatAllFacts, loadDiagnosis, syncSponsorFromCard, reportAgeDays, STALE_REPORT_DAYS } from "../diagnose";
 import { getStore } from "../store";
 import { requireUser } from "../guard";
 
@@ -80,8 +80,12 @@ export async function POST(req: NextRequest) {
 
         await syncSponsorFromCard(store, s);
         const d = s.sponsorId ? await loadDiagnosis(store, s.sponsorId) : null;
+        const age = d ? reportAgeDays(d) : 0;
+        const stale = d && age > STALE_REPORT_DAYS
+          ? `STALE DATA: the latest Achievable report is from ${d.today} (${age} days old). Every number below is as of then — flag that a fresh report is needed before the next sponsor email.\n`
+          : "";
         const facts = d
-          ? formatAllFacts(d, "team")
+          ? stale + formatAllFacts(d, "team")
           : formatPaceFacts(computePace({
               pagesRead: s.pagesRead ?? null,
               pagesTotal: s.pagesTotal ?? null,

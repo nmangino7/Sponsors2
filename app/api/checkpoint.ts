@@ -80,6 +80,14 @@ export function buildCheckpoint({ report, pace, readiness, today }: BuildInput):
     };
   }
 
+  // Book unfinished but the page count is unknown: still no exam promise in Phase 1.
+  if (readiness.phase === 1) {
+    return {
+      metric: "active_days", createdOn: today, due, baseline: 0, target: 3, minScore: null,
+      text: `Read on at least 3 of the next 4 days — reading first, every day. I'm checking your Achievable activity ${when}.`,
+    };
+  }
+
   const baseline = readiness.timed.length;
   const add = readiness.phase === 4 || readiness.goldStandard.met ? 1 : 2;
   const minScore = readiness.phase === 4 || readiness.goldStandard.met ? 80 : 75;
@@ -110,7 +118,8 @@ export function evaluateCheckpoint(cp: Checkpoint, { report, readiness, today }:
     progressed = actual > cp.baseline;
     hit = actual >= cp.target;
   } else if (cp.metric === "active_days") {
-    actual = report.daily.filter(d => d.totalMin > 0 && d.date > cp.createdOn && d.date <= cp.due).length;
+    // "3 of the next 4 days" = the day it was set through the due date.
+    actual = report.daily.filter(d => d.totalMin > 0 && d.date >= cp.createdOn && d.date <= cp.due).length;
     progressed = actual > 0;
     hit = actual >= cp.target;
   } else {

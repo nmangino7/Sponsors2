@@ -6,6 +6,7 @@ import { parseDurationToMinutes } from "../pace";
 import type { KaplanData } from "../readiness";
 import { computeDiagnosis, diagnosisSummary, formatAllFacts, refreshDiagnosis } from "../diagnose";
 import { getStore } from "../store";
+import { nameKey } from "../store-model";
 import { requireUser } from "../guard";
 
 export const maxDuration = 300;
@@ -50,6 +51,12 @@ function mergeReport(base: ReportData, llm: LlmSponsor | undefined): ReportData 
   return r;
 }
 
+/** Key-order-independent JSON (Postgres jsonb reorders object keys). */
+function canonicalJson(v: unknown): string {
+  return JSON.stringify(v ?? null, (_k, x) =>
+    x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(k => [k, (x as Record<string, unknown>)[k]])) : x);
+}
+
 function cleanKaplan(k: Partial<KaplanData> | null | undefined): KaplanData | null {
   if (!k) return null;
   const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -86,8 +93,27 @@ export async function POST(req: NextRequest) {
 
     // 2. Who is this? Achievable UUID first, then name — or the user's explicit pick.
     let sponsor = sponsorId ? await store.getSponsor(sponsorId) : null;
+    if (sponsor && extracted) {
+      // An explicit "Save To" pick must not take someone else's report (or Achievable account).
+      const owner = extracted.achievableUuid ? await store.findSponsor({ achievableUuid: extracted.achievableUuid }) : null;
+      const uuidClash = (owner && owner.id !== sponsor.id)
+        || (!!sponsor.achievableUuid && !!extracted.achievableUuid && sponsor.achievableUuid !== extracted.achievableUuid);
+      const words = (n: string) => new Set(nameKey(n).split(" ").filter(Boolean));
+      const nameClash = !sponsor.achievableUuid && !!extracted.name
+        && ![...words(extracted.name)].some(w => words(sponsor!.name).has(w));
+      if (uuidClash || nameClash) {
+        const who = extracted.name ?? "a different Achievable account";
+        const held = owner && owner.id !== sponsor.id ? (owner.name === who ? " (already in memory)" : ` (saved as ${owner.name})`) : "";
+        return NextResponse.json({
+          sponsors: [],
+          error: `This report is for ${who}${held}, not ${sponsor.name}. Nothing was saved. Pick the right sponsor under "Save To", or choose Auto-match.`,
+        }, { status: 409 });
+      }
+    }
     if (!sponsor) sponsor = await store.findSponsor({ achievableUuid: extracted?.achievableUuid, name: extracted?.name ?? sponsorName });
-    const matched: "existing" | "new" = sponsor ? "existing" : "new";
+    let matched: "existing" | "new" = sponsor ? "existing" : "new";
+    // Exam: an explicit pick, else the course printed on the report, else what's on file.
+    const examPick: string | null = exam || extracted?.exam || sponsor?.exam || null;
 
     // 3. Preliminary diagnosis from memory + the deterministic read, so the draft plan is phase-correct.
     let prelimFacts = "";
@@ -96,13 +122,14 @@ export async function POST(req: NextRequest) {
       const reportDate = extracted.reportDate ?? today();
       const prelim = computeDiagnosis({
         report: extracted, kaplan: null, today: reportDate,
-        exam: exam || sponsor?.exam || extracted.exam, examDate: examDate || sponsor?.examDate || extracted.targetDate,
+        exam: examPick, examDate: examDate || sponsor?.examDate || extracted.targetDate,
         previous: snaps.find(s => s.reportDate < reportDate) ?? null,
         sits: sponsor ? await store.realSits(sponsor.id) : [],
         notes: [notes, ...(sponsor ? (await store.notes(sponsor.id, 3)).map(n => n.body) : [])].filter(Boolean),
         emails: sponsor ? await store.emails(sponsor.id, 10) : [],
       });
-      prelimFacts = formatAllFacts(prelim, "team");
+      // Sponsor-audience facts: the draft's status/issues text later feeds the sponsor email.
+      prelimFacts = formatAllFacts(prelim, "sponsor");
     }
 
     let scoreContext = "";
@@ -116,7 +143,7 @@ export async function POST(req: NextRequest) {
     const textPrompt = `Build this sponsor's draft 4-day plan and extract anything the parser couldn't read.
 
 SPONSOR: ${sponsorName || extracted?.name || sponsor?.name || "[Unknown]"}
-CURRENT EXAM: ${exam || sponsor?.exam || extracted?.exam || "[Unknown]"}
+CURRENT EXAM: ${examPick || "[Unknown]"}
 EXAM (TEST) DATE: ${examDate || sponsor?.examDate || extracted?.targetDate || "[unknown — use the report's Target date if visible]"}
 ${prelimFacts ? `\n${prelimFacts}\n\nThe facts above are computed from the report and this sponsor's history — use them; don't re-derive the phase or the quota.` : ""}
 ${extracted ? `\nACHIEVABLE REPORT TEXT (already parsed; use it for chapter/section names and weak topics):\n${trimForModel(reportText)}` : ""}
@@ -129,7 +156,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "sponsors": [
     {
       "name": "${sponsorName || extracted?.name || ""}",
-      "exam": "${exam || extracted?.exam || "SIE"}",
+      "exam": "${examPick || "SIE"}",
       "examDate": "YYYY-MM-DD if known or visible, else empty string",
       "pagesRead": null,
       "pagesTotal": null,
@@ -202,12 +229,21 @@ RULES:
     // 4. Merge, remember, diagnose.
     const report = mergeReport(extracted ?? emptyReport(), llm);
     const kaplan = cleanKaplan(llm?.kaplan);
-    const name = (sponsorName || report.name || llm?.name || "").trim();
-    const theExam = exam || report.exam || llm?.exam || null;
+    // The name printed on the report is the identity; a typed name is for screenshots/notes.
+    const name = (extracted?.name || sponsorName || report.name || llm?.name || "").trim();
+    const theExam = examPick || llm?.exam || null;
     const theExamDate = examDate || (llm?.examDate && /^\d{4}-\d{2}-\d{2}$/.test(llm.examDate) ? llm.examDate : null) || report.targetDate || null;
 
     let summary = null;
     let sponsorRecord = null;
+    if (name && !sponsor) {
+      // Second chance: the name may only be known now (typed, or read from a screenshot by the model).
+      sponsor = await store.findSponsor({ achievableUuid: report.achievableUuid, name });
+      if (!sponsor && report.name && nameKey(report.name) !== nameKey(name)) {
+        sponsor = await store.findSponsor({ achievableUuid: report.achievableUuid, name: report.name });
+      }
+      if (sponsor) matched = "existing";
+    }
     if (name) {
       if (!sponsor) {
         sponsor = await store.createSponsor({ name, achievableUuid: report.achievableUuid, exam: theExam, examDate: theExamDate });
@@ -226,7 +262,7 @@ RULES:
         const reportDate = report.reportDate ?? today();
         const latest = (await store.snapshots(sponsor.id, 1))[0];
         const duplicate = latest && latest.reportDate === reportDate && latest.pagesRead === report.pagesRead
-          && latest.data.attempts.length === report.attempts.length && JSON.stringify(latest.kaplan) === JSON.stringify(kaplan);
+          && latest.data.attempts.length === report.attempts.length && canonicalJson(latest.kaplan) === canonicalJson(kaplan);
         if (!duplicate) {
           const prelim = computeDiagnosis({
             report, kaplan, today: reportDate, exam: sponsor.exam, examDate: sponsor.examDate ?? report.targetDate,
