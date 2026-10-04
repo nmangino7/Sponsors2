@@ -7,6 +7,8 @@ export const BOOK_DEADLINE_TARGET_DAYS = 14;
 export const BOOK_DEADLINE_FLOOR_DAYS = 5;
 // Above this daily reading load we flag the DM (sponsor still gets the ramped number).
 const CRITICAL_MINUTES_PER_DAY = 180;
+// Fallback reading estimate when Achievable's "Reading time left" is missing.
+const MINUTES_PER_PAGE = 8;
 
 export interface PaceInput {
   pagesRead?: number | null;
@@ -16,6 +18,10 @@ export interface PaceInput {
   quizTimeHours?: number | null;
   examDate?: string | null; // YYYY-MM-DD
   today?: Date;
+  // Observed pace (pace v2): the previous snapshot from memory, else time on the platform.
+  prevPagesRead?: number | null;
+  prevDate?: string | null; // YYYY-MM-DD
+  firstActivityDate?: string | null; // YYYY-MM-DD
 }
 
 export interface PaceFacts {
@@ -31,6 +37,12 @@ export interface PaceFacts {
   daysToDeadline: number | null;
   requiredMinutesPerDay: number | null;
   requiredPagesPerDay: number | null;
+  observedPagesPerDay: number | null;
+  observedPaceSource: "since-last-upload" | "since-first-activity" | null;
+  projectedFinish: string | null; // when the book is done at the observed pace
+  stalled: boolean; // pages remain but observed pace is ~0
+  finishVsDeadlineDays: number | null; // + = finishes AFTER the book deadline
+  finishVsExamDays: number | null; // + = finishes AFTER the exam
   status: "on-pace" | "behind" | "critical" | "unknown";
   quizVsReadingFlag: boolean;
   readingTimeHours: number | null;
@@ -60,15 +72,22 @@ export function parsePages(raw?: string | null): { read: number | null; total: n
   return { read: parseInt(m[1], 10), total: parseInt(m[2], 10) };
 }
 
+const DAY = 86400000;
+
 function toISO(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function utcDay(d: Date): number {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 function daysBetween(a: Date, b: Date): number {
-  const MS = 24 * 60 * 60 * 1000;
-  const a0 = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate());
-  const b0 = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
-  return Math.round((b0 - a0) / MS);
+  return Math.round((utcDay(b) - utcDay(a)) / DAY);
+}
+
+function isoDate(iso: string): Date {
+  return new Date(`${iso}T00:00:00Z`);
 }
 
 export function computePace(input: PaceInput): PaceFacts {
@@ -87,12 +106,14 @@ export function computePace(input: PaceInput): PaceFacts {
   let bookDeadline: string | null = null;
   let daysToDeadline: number | null = null;
   let usingFloor = false;
+  let exam: Date | null = null;
 
   if (input.examDate) {
-    const exam = new Date(`${input.examDate}T00:00:00Z`);
-    if (!isNaN(exam.getTime())) {
-      const target = new Date(exam.getTime() - BOOK_DEADLINE_TARGET_DAYS * 86400000);
-      const floor = new Date(exam.getTime() - BOOK_DEADLINE_FLOOR_DAYS * 86400000);
+    const e = isoDate(input.examDate);
+    if (!isNaN(e.getTime())) {
+      exam = e;
+      const target = new Date(e.getTime() - BOOK_DEADLINE_TARGET_DAYS * DAY);
+      const floor = new Date(e.getTime() - BOOK_DEADLINE_FLOOR_DAYS * DAY);
       let deadline = target;
       // If the 2-week target is already gone, slide toward the 5-day floor.
       if (daysBetween(today, target) < 1) {
@@ -114,10 +135,43 @@ export function computePace(input: PaceInput): PaceFacts {
     }
     if (pagesRemaining !== null) {
       requiredPagesPerDay = Math.ceil(pagesRemaining / daysToDeadline);
-      // Fallback estimate when Achievable's "Reading time left" is missing.
       if (requiredMinutesPerDay === null) {
-        requiredMinutesPerDay = Math.ceil((pagesRemaining * 8) / daysToDeadline);
+        requiredMinutesPerDay = Math.ceil((pagesRemaining * MINUTES_PER_PAGE) / daysToDeadline);
       }
+    }
+  }
+
+  // Observed pace: prefer the run-over-run delta from memory; fall back to time on the platform.
+  let observedPagesPerDay: number | null = null;
+  let observedPaceSource: PaceFacts["observedPaceSource"] = null;
+  if (pagesRead !== null && typeof input.prevPagesRead === "number" && input.prevDate) {
+    const dd = daysBetween(isoDate(input.prevDate), today);
+    if (dd > 0 && pagesRead >= input.prevPagesRead) {
+      observedPagesPerDay = (pagesRead - input.prevPagesRead) / dd;
+      observedPaceSource = "since-last-upload";
+    }
+  }
+  if (observedPagesPerDay === null && pagesRead !== null && input.firstActivityDate) {
+    const dd = Math.max(daysBetween(isoDate(input.firstActivityDate), today), 1);
+    observedPagesPerDay = pagesRead / dd;
+    observedPaceSource = "since-first-activity";
+  }
+  if (observedPagesPerDay !== null) observedPagesPerDay = Math.round(observedPagesPerDay * 10) / 10;
+
+  let projectedFinish: string | null = null;
+  let stalled = false;
+  let finishVsDeadlineDays: number | null = null;
+  let finishVsExamDays: number | null = null;
+  if (bookDone) {
+    projectedFinish = toISO(today);
+  } else if (pagesRemaining !== null && observedPagesPerDay !== null) {
+    if (observedPagesPerDay < 0.05) {
+      stalled = true;
+    } else {
+      const finish = new Date(utcDay(today) + Math.ceil(pagesRemaining / observedPagesPerDay) * DAY);
+      projectedFinish = toISO(finish);
+      if (bookDeadline) finishVsDeadlineDays = daysBetween(isoDate(bookDeadline), finish);
+      if (exam) finishVsExamDays = daysBetween(exam, finish);
     }
   }
 
@@ -135,10 +189,24 @@ export function computePace(input: PaceInput): PaceFacts {
   let status: PaceFacts["status"] = "unknown";
   if (bookDone) {
     status = "on-pace";
-  } else if (requiredMinutesPerDay !== null) {
-    if (requiredMinutesPerDay > CRITICAL_MINUTES_PER_DAY) status = "critical";
-    else if (usingFloor || requiredMinutesPerDay > 90) status = "behind";
-    else status = "on-pace";
+  } else if (requiredMinutesPerDay !== null || projectedFinish !== null || stalled) {
+    const examSoon = exam !== null && daysBetween(today, exam) <= 14;
+    if (
+      (requiredMinutesPerDay !== null && requiredMinutesPerDay > CRITICAL_MINUTES_PER_DAY) ||
+      (finishVsExamDays !== null && finishVsExamDays > 0) ||
+      (stalled && examSoon)
+    ) {
+      status = "critical";
+    } else if (
+      usingFloor ||
+      stalled ||
+      (finishVsDeadlineDays !== null && finishVsDeadlineDays > 0) ||
+      (requiredMinutesPerDay !== null && requiredMinutesPerDay > 90)
+    ) {
+      status = "behind";
+    } else {
+      status = "on-pace";
+    }
   }
 
   return {
@@ -154,6 +222,12 @@ export function computePace(input: PaceInput): PaceFacts {
     daysToDeadline,
     requiredMinutesPerDay,
     requiredPagesPerDay,
+    observedPagesPerDay,
+    observedPaceSource,
+    projectedFinish,
+    stalled,
+    finishVsDeadlineDays,
+    finishVsExamDays,
     status,
     quizVsReadingFlag,
     readingTimeHours,
@@ -198,6 +272,19 @@ export function formatPaceFacts(p: PaceFacts): string {
     L.push("- No exam date provided: give the quota relative to the deadline (finish ~2 weeks before test day) and ask them to confirm their test date.");
   }
 
+  if (!p.bookDone && p.observedPagesPerDay !== null) {
+    const since = p.observedPaceSource === "since-last-upload" ? "since their last report" : "averaged since they started";
+    if (p.stalled) {
+      L.push(`- OBSERVED PACE: ~0 pages/day ${since} — reading has STALLED. At this pace the book never gets finished. Say so.`);
+    } else if (p.projectedFinish) {
+      let when = `the book finishes ~${p.projectedFinish}`;
+      if (p.finishVsExamDays !== null && p.finishVsExamDays > 0) when += ` — ${p.finishVsExamDays} day(s) AFTER the exam`;
+      else if (p.finishVsDeadlineDays !== null && p.finishVsDeadlineDays > 0) when += ` — ${p.finishVsDeadlineDays} day(s) after the book deadline`;
+      else if (p.finishVsDeadlineDays !== null) when += " — before the book deadline";
+      L.push(`- OBSERVED PACE: ~${p.observedPagesPerDay} pages/day ${since}; at that pace ${when}. This is the runway number — use it.`);
+    }
+  }
+
   if (p.quizVsReadingFlag) {
     L.push(`- IMBALANCE: ${p.quizTimeHours}h on quizzes vs ${p.readingTimeHours}h reading while the book is unfinished. Call this out directly — it is why they are stuck.`);
   }
@@ -205,7 +292,7 @@ export function formatPaceFacts(p: PaceFacts): string {
   const statusLine: Record<PaceFacts["status"], string> = {
     "on-pace": "- PACE STATUS: on pace. Keep the quota steady.",
     behind: "- PACE STATUS: BEHIND. Say so plainly, give the higher quota, and do NOT suggest moving the exam date.",
-    critical: "- PACE STATUS: CRITICAL — the required load is very high. Give the sponsor the ramped number anyway and flag the DM internally. Never tell the sponsor to move the exam date.",
+    critical: "- PACE STATUS: CRITICAL — at the current pace the book is not done in time. Give the sponsor the ramped number anyway and flag the DM internally. Never tell the sponsor to move the exam date.",
     unknown: "- PACE STATUS: unknown (missing data). Assume Phase 1 and state what you need.",
   };
   L.push(statusLine[p.status]);

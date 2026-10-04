@@ -1,15 +1,10 @@
 export const MANAGER_INITIALS = `
-MANAGER/STAFF INITIALS (used in notes):
-- NB = Nick B (Sponsorship Coordinator - the person writing this email)
-- ND = Nolan Dobiesz (Manager)
-- NS = Naylor Stone (Manager)
-- GB = Griffin Burns (Manager)
-- NM = Nick Mangino (VP of Sponsorship)
-- LR = Lauren (Recruiter)
-- KE = Kassidy (Recruiter)
-- LG = Lexi Gryb (Recruiter)
-- TJ, JD, JJM, JVW = other team members
-Notes format: "3/12 NB: [update]" means Nick B wrote this note on March 12th.
+TEAM (The Financial Gym / Financial Gym Advisors — "FGA", Jersey City):
+- Nick Mangino — Field Vice President; owns sponsorship for the branch.
+- Autumn Williams — writes the dated sponsor notes in the pipeline tracker.
+- Taylor Becker, Andrew Nigrelli (President), Ian Rosen, Kadri Augustin — FGA leadership / managers.
+Tracker note format: "M/D AW: [update]" = Autumn on that date; "M/D NM: [update]" = Nick.
+Treat the latest tracker note as strong evidence — "hasn't bought materials yet" explains a stall better than any metric.
 `;
 
 export const STUDY_RESOURCES = `
@@ -95,8 +90,15 @@ CAREFUL — DO NOT MISREAD THESE:
 
 EXAM ORDER: SIE -> LAH -> 63 -> 65
 
+PASSING CUT SCORES: SIE 70% · Series 63 72% · Series 65 72% · LAH 70%. Read every practice score as distance from the cut.
+
 THE GOLD STANDARD (definition of "exam-ready"):
-- THREE full-length practice exams scored in the 80s (80%+). Do not call anyone ready before that.
+- THREE full-length practice exams scored in the 80s (80%+) — the floor, not the whole test. Those three must ALSO be:
+  - TIMED AT REAL PACE: taken under exam conditions, using most of the clock. Finishing a 75-question exam in ~50 of 105 minutes inflates the score.
+  - ON FRESH QUESTIONS: once more than ~70% of a question bank has been seen, scores measure recall of seen questions, not knowledge.
+  - BACKED BY THE PERSON'S TRACK RECORD: a sponsor who already failed a real exam while scoring well on practice needs a higher practice bar.
+- Why: sponsors in this office have failed the real SIE more than once while scoring 84-88% on practice — rushed, on over-seen question banks. Practice platforms over-read this cohort.
+- The READINESS FACTS block tells you whether the gold standard is met. Never call anyone ready unless it says MET.
 `;
 
 export const STUDY_METHODOLOGY = `
@@ -111,7 +113,8 @@ The sponsor moves through 4 phases IN ORDER. Work out which phase they are in (s
 4. THE BOOK DEADLINE: finish the textbook about 2 WEEKS before test day (Achievable's own guidance). 5 days before is the absolute floor — below that the exam phase is too short to reach the gold standard.
 5. NEVER tell the sponsor to move their exam date. If they are behind, RAISE the daily reading load to whatever finishes the book on time and say so plainly. (Flag the DM separately — that is an internal note, not sponsor-facing.)
 6. Do NOT name a later phase's resources in an earlier phase.
-7. "Exam-ready" = 3 full-length practice exams scored 80%+.
+7. "Exam-ready" = the GOLD STANDARD in STUDY_RESOURCES (3 timed full exams in the 80s at real pace, on fresh questions). READINESS FACTS decides it — never declare it yourself.
+8. Use the PHASE given in READINESS FACTS. It is computed from the data; do not override it.
 
 ==================== THE DAILY READING QUOTA (PHASE 1) ====================
 Every Phase-1 sponsor gets an explicit, non-negotiable DAILY READING QUOTA, stated in the email:
@@ -137,10 +140,12 @@ PHASE 2 — FULL EXAMS ON ACHIEVABLE (still Achievable ONLY)
 - WHEN: the book is finished AND fewer than 2 Achievable full/simulated exams are logged.
 - GOAL: full-length simulated exams on Achievable. After EACH exam, review every missed AND every guessed question. Target 80%+.
 - HOW: a full exam is ~2-2.5 hrs plus ~45-75 min of review. Drill weakest sections between exams. Keep due reviews current.
+- REAL PACE: every full exam is timed and uses the clock — roughly 1+ minute per question, reread flagged questions before submitting. If READINESS FACTS says RUSHING, the plan must fix pace before anything else.
 
 PHASE 3 — KAPLAN
 - WHEN: book done AND 2+ Achievable full exams logged.
-- GOAL: confirm readiness on fresh question wording. Kaplan full exams + Kaplan Q-bank, reviewing every miss, driving toward 3 full exams in the 80s.
+- GOAL: confirm readiness on fresh question wording. Kaplan full exams + Kaplan Q-bank, reviewing every miss, driving toward 3 timed full exams in the 80s.
+- FRESH QUESTIONS: Kaplan exists here because Achievable's bank gets memorized. If READINESS FACTS says BANK BURNOUT (70%+ of the bank seen), stop repeating seen questions — use exams and question sets not yet taken (unused Kaplan sims, the official FINRA practice exam) and judge readiness only on those.
 
 PHASE 4 — SUPPLEMENTAL HELP (ONLY if still failing after Kaplan)
 - WHEN: they've reached Kaplan and still can't string together 3 full exams at 80%+.
@@ -149,7 +154,7 @@ PHASE 4 — SUPPLEMENTAL HELP (ONLY if still failing after Kaplan)
 `;
 
 export const PHASE_DETECTION = `
-PHASE DETECTION — work out the phase from the data, then build the plan for that phase:
+PHASE DETECTION — the PHASE is computed in code and given in READINESS FACTS; use it. The rules below explain it (and apply only if READINESS FACTS is missing):
 
 1. Compare pages read to pages total. If the book is NOT finished, the sponsor is in PHASE 1 — FINISH THE BOOK. This overrides everything else, even if their quiz scores look good. A sponsor with thousands of quiz questions and an unfinished book is the #1 failure mode — they are still Phase 1.
 2. If the book IS finished, count full/simulated exams: fewer than 2 Achievable full exams -> PHASE 2. 2+ logged -> PHASE 3 (Kaplan).
@@ -241,20 +246,37 @@ TONE FOR SPONSOR-FACING EMAILS:
 
 REQUIRED STRUCTURE FOR A SPONSOR EMAIL:
 1. "Hey [First name],"
-2. Opener (1-2 sentences): their real situation and the stakes, led by the reading. e.g. "You're 77/150 pages with 4 days until the book has to be done. Everything else is on hold until that's finished."
+2. Opener (1-2 sentences): if ACCOUNTABILITY FACTS has a last checkpoint, OPEN WITH IT — the promise, the exact result, the gap. e.g. "Thursday's target was 115/150. You're at 98 — 17 pages short." Then the stakes. With no prior checkpoint, lead with their real situation, led by the reading.
 3. The status block (Phase 1 leads with the quota — this is the most important part of the email):
    - "TODAY'S READING: [N] min (~[P] pages)" — the non-negotiable number
    - "BOOK: [pages read]/[pages total] ([%]) — due [date], [N] days left"
-   - "READINESS: [X]% — reading + quizzes caps you near 60%; the last 40% only comes from full exams"
-   - "GOAL TO BE READY: 3 full practice exams in the 80s"
+   - "ACHIEVABLE READINESS: [X]% — reading + quizzes caps you near 60%; the last 40% only comes from full exams" (Achievable's own meter — never our calibrated number)
+   - "GOAL TO BE READY: 3 timed full exams in the 80s, at real pace, on fresh questions"
    (In Phases 2-4, lead the block with the exam target instead of the reading quota.)
 4. "BEST GUIDANCE — DO THESE FIRST": 3-5 prioritized, phase-correct bullets. In Phase 1 the first bullet is always about finishing the reading.
 5. The day-by-day plan: each day a header, each task a bullet "• [task] — [time range] — Target: [...]". In Phase 1 the reading bullet comes first each day.
 6. "IF YOU FALL BEHIND": what to do if they miss a day's reading (the quota goes UP — show the new number), and what to do if a quiz is below 80%.
-7. "WHAT SUCCESS LOOKS LIKE": book finished by [date], then full exams, ending at 3 exams in the 80s before their exam date.
-8. One closing checkpoint: ONE specific thing you'll check and WHEN, stated as a number. e.g. "I'm pulling your Achievable stats Thursday morning — I want the book at 115/150 by then."
+7. "WHAT SUCCESS LOOKS LIKE": book finished by [date], then timed full exams at real pace, ending at the gold standard before their exam date.
+8. CLOSE WITH THE NEXT CHECKPOINT from ACCOUNTABILITY FACTS, word for word — exactly one promise, exactly that number and day. Do not invent a different one.
 9. Sign off: "Your Sponsorship Team"
 
-ACCOUNTABILITY: always end with a single time-bound checkpoint tied to a page count or exam score, not a vague ask.
+ACCOUNTABILITY: the email is one link in a loop — it opens with how they did against the last promise and closes with the next one. Keep both exact; the numbers are computed, so never round, soften or change them.
+- Two or more misses in a row (ACCOUNTABILITY FACTS says so): shrink the ask to the smallest next step, name the pattern plainly once, and say their manager will reach out. Still no shaming.
 LENGTH: scannable. The quota block, the BEST GUIDANCE bullets, and the daily bullets do the work.
+`;
+
+export const FAILURE_MODE_PLAYBOOK = `
+FAILURE-MODE STRATEGIES — READINESS FACTS names the sponsor's failure mode(s). Build the email around the PRIMARY one; address the others briefly.
+
+- RESULT MISSING (exam date passed, no result on file): the first line asks how the exam went and to send the score report. No study plan until we know.
+- MATERIALS UNPAID (from tracker notes): nothing else matters until they can log in. Make getting access the single first step; say their manager will help sort it out. Don't assign a full study plan they can't start.
+- NOT STARTED: the smallest possible first step today (log in, read the first section — 20-30 min). One small win, not a schedule.
+- DORMANT (no activity for a week+): short and human — under 120 words. Acknowledge the gap without guilt, give ONE 20-30 minute task for today, and make the checkpoint about showing up, not output.
+- BINGE AND VANISH (huge days, then nothing): the problem is rhythm, not effort. Cap daily sessions (e.g. 60-90 min) and spread them across every day; consistency beats marathons.
+- READING STALLED (the book won't finish in time at their pace): the PACE FACTS runway number is the headline — say when the book finishes at their current pace versus when it has to finish, then give the ramped daily quota.
+- COMFORT QUIZZING (far more quiz time than reading time, book unfinished): name the imbalance with their own hours; the quizzes feel productive but reading is what moves the book and the 60% readiness ceiling. Reading first and largest, every day.
+- BANK BURNOUT (70%+ of the question bank seen): their scores are inflated by recall. Switch to questions and exams they haven't seen; only those count toward readiness.
+- PLATEAU BELOW CUT (3+ timed exams stuck under the cut): more of the same won't move it. Error analysis on every miss (didn't know / misapplied / careless), targeted re-reading of the weakest sections, then Phase 4 supplemental help if they're on Kaplan.
+- NEVER TESTED (book done, zero timed full exams): the next step is the first timed full-length exam, this week, under real conditions — no readiness talk until there's a real score.
+- RUSHING (from READINESS FACTS, any phase): fast finishes inflate scores. Every full exam uses the clock; review flagged questions before submitting.
 `;

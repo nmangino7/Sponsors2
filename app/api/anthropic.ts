@@ -3,8 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 export const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Parsing is extraction work -> cheaper model. Coaching emails -> top model.
-export const MODEL_PARSE = "claude-sonnet-5";
-export const MODEL_EMAIL = "claude-opus-5";
+// Each is a fallback chain: newest first, then the previous generation if this
+// account doesn't have the newer model (404).
+export const MODEL_PARSE = ["claude-sonnet-5-5", "claude-sonnet-5"];
+export const MODEL_EMAIL = ["claude-opus-5-5", "claude-opus-5"];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyParams = Record<string, any>;
@@ -16,6 +18,27 @@ type AnyParams = Record<string, any>;
  * failing the user's request.
  */
 export async function createMessage(params: AnyParams) {
+  const models: string[] = Array.isArray(params.model) ? params.model : [params.model];
+  let lastErr: unknown;
+  for (const model of models) {
+    try {
+      return await createWithParamFallback({ ...params, model });
+    } catch (err: unknown) {
+      lastErr = err;
+      if (!isModelUnavailable(err) || model === models[models.length - 1]) throw err;
+      console.warn(`[anthropic] ${model} unavailable, falling back:`, describe(err));
+    }
+  }
+  throw lastErr;
+}
+
+function isModelUnavailable(err: unknown): boolean {
+  if (!(err instanceof Anthropic.APIError)) return false;
+  const m = describe(err).toLowerCase();
+  return err.status === 404 || (err.status === 400 && m.includes("model") && (m.includes("not found") || m.includes("invalid") || m.includes("does not exist")));
+}
+
+async function createWithParamFallback(params: AnyParams) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return await client.messages.create(params as any);
