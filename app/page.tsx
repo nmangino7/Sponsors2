@@ -113,7 +113,11 @@ interface Whoami {
   authConfigured: boolean;
   devBypass: boolean;
   memory: "postgres" | "memory";
+  aiKey?: boolean;
 }
+
+type Writer = "free" | "claude-app" | "api";
+const WRITER_KEY = "fga.writer";
 
 interface Timeline {
   sponsor: { id: string; name: string; exam: string | null; examDate: string | null };
@@ -277,7 +281,10 @@ export default function Home() {
   const [customActions, setCustomActions] = useState<string[]>(["", "", "", ""]);
 
   const [generatedEmail, setGeneratedEmail] = useState("");
-  const [generatedSponsorEmails, setGeneratedSponsorEmails] = useState<{ name: string; email: string; checkpoint: string | null }[]>([]);
+  const [teamIsPrompt, setTeamIsPrompt] = useState(false);
+  const [writer, setWriterState] = useState<Writer>("free");
+  const [kaplanText, setKaplanText] = useState("");
+  const [generatedSponsorEmails, setGeneratedSponsorEmails] = useState<{ name: string; email: string; checkpoint: string | null; isPrompt?: boolean }[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingSponsorEmails, setLoadingSponsorEmails] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -320,6 +327,18 @@ export default function Home() {
   }, [checkAuth]);
 
   useEffect(() => { checkAuth(); }, [checkAuth]);
+  // The writer choice is a per-browser convenience; default is the free built-in writer.
+  useEffect(() => {
+    try {
+      const w = localStorage.getItem(WRITER_KEY);
+      if (w === "free" || w === "claude-app" || w === "api") setWriterState(w);
+    } catch { /* storage blocked: keep the default */ }
+  }, []);
+  const setWriter = (w: Writer) => {
+    setWriterState(w);
+    try { localStorage.setItem(WRITER_KEY, w); } catch { /* ignore */ }
+  };
+  const effectiveWriter: Writer = writer === "api" && whoami && !whoami.aiKey ? "free" : writer;
   useEffect(() => { if (signedIn) loadSponsors(); }, [signedIn, loadSponsors]);
 
   const openTimeline = async (id: string) => {
@@ -500,7 +519,7 @@ export default function Home() {
       const res = await fetch("/api/parse-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes, startDay, sponsorName: parserName, exam: parserExam || undefined, images, reportText, sponsorId: parserSponsorId || undefined, scoreEntries: scoreEntries.filter(s => !parserName.trim() || s.sponsor.toLowerCase().includes(parserName.toLowerCase())) }),
+        body: JSON.stringify({ notes, startDay, sponsorName: parserName, exam: parserExam || undefined, writer: effectiveWriter, kaplanText: kaplanText || undefined, images, reportText, sponsorId: parserSponsorId || undefined, scoreEntries: scoreEntries.filter(s => !parserName.trim() || s.sponsor.toLowerCase().includes(parserName.toLowerCase())) }),
       });
       if (res.status === 401 || res.status === 403) { await checkAuth(); setParsing(false); return; }
       const data = await res.json();
@@ -508,7 +527,9 @@ export default function Home() {
       setDiagnosis(data.diagnosis ?? null);
       setSponsorRecord(data.sponsorRecord ?? null);
       if (data.sponsorRecord) loadSponsors();
-      if (data.aiError) setError(`The report was saved and diagnosed, but the AI draft plan failed: ${data.aiError} You can still write the plan yourself or generate the emails.`);
+      if (data.aiError) setError(effectiveWriter === "api"
+        ? `The Claude API step failed (${data.aiError}). The report was saved and the free writer drafted the plan instead.`
+        : data.aiError);
       if (data.sponsors?.length > 0) {
         const s = data.sponsors[0];
         let normalizedActions: string[][] = [[], [], [], []];
@@ -650,7 +671,7 @@ export default function Home() {
     setAiSuggestions(null);
     setDiagnosis(null);
     setSponsorRecord(null);
-    setParserName(""); setParserExam(""); setNotes(""); setUploadedFiles([]); setParserSponsorId("");
+    setParserName(""); setParserExam(""); setNotes(""); setUploadedFiles([]); setParserSponsorId(""); setKaplanText("");
   };
 
   const discardSuggestions = () => {
@@ -665,12 +686,12 @@ export default function Home() {
       const res = await fetch("/api/generate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startDay, date, sponsors, scoreEntries }),
+        body: JSON.stringify({ startDay, date, sponsors, scoreEntries, writer: effectiveWriter }),
       });
       if (res.status === 401 || res.status === 403) { await checkAuth(); setLoading(false); return; }
       const data = await res.json();
       if (data.error) setError(data.error);
-      else setGeneratedEmail(data.email);
+      else { setGeneratedEmail(data.prompt ?? data.email); setTeamIsPrompt(!!data.prompt); }
     } catch (e) {
       setError(`Failed to generate email: ${e instanceof Error ? e.message : "Unknown error"}`);
     }
@@ -688,18 +709,18 @@ export default function Home() {
     if (namedSponsors.length === 0) return;
     setLoadingSponsorEmails(true); setError("");
     try {
-      const results: { name: string; email: string; checkpoint: string | null }[] = [];
+      const results: { name: string; email: string; checkpoint: string | null; isPrompt?: boolean }[] = [];
       const problems: string[] = [];
       for (const sponsor of namedSponsors) {
         const res = await fetch("/api/generate-sponsor-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ startDay, date, sponsor }),
+          body: JSON.stringify({ startDay, date, sponsor, writer: effectiveWriter }),
         });
         if (res.status === 401 || res.status === 403) { await checkAuth(); break; }
         const data = await res.json();
         if (data.error) { problems.push(data.error); if (res.status !== 409) break; continue; }
-        results.push({ name: sponsor.name, email: data.email, checkpoint: data.checkpoint?.text ?? null });
+        results.push({ name: sponsor.name, email: data.prompt ?? data.email, checkpoint: data.checkpoint?.text ?? null, isPrompt: !!data.prompt });
       }
       setGeneratedSponsorEmails(results);
       if (problems.length) setError(problems.join(" "));
@@ -804,6 +825,15 @@ export default function Home() {
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Date</label>
             <input type="text" value={date} onChange={e => setDate(e.target.value)}
               className="w-full border border-slate-200/60 rounded-xl px-4 py-3 text-sm bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
+          </div>
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Email Writer</label>
+            <select value={effectiveWriter} onChange={e => setWriter(e.target.value as Writer)} aria-label="Email writer"
+              className="w-full border border-slate-200/60 rounded-xl px-4 py-3 text-sm bg-slate-50/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all">
+              <option value="free">Free — built-in writer</option>
+              <option value="claude-app">Free — copy to Claude app</option>
+              <option value="api" disabled={!whoami?.aiKey}>Claude API (uses credits){whoami?.aiKey ? "" : " — no key set"}</option>
+            </select>
           </div>
           <div className="flex-1 min-w-[250px]">
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl px-4 py-3 border border-indigo-100">
@@ -998,7 +1028,7 @@ export default function Home() {
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
         </div>
-        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest">AI Notes Parser</h2>
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Report &amp; Notes</h2>
       </div>
 
       {/* AI Notes Parser */}
@@ -1047,6 +1077,14 @@ export default function Home() {
         </div>
 
         <div className="mb-5">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Kaplan Numbers (optional)</label>
+          <textarea value={kaplanText} onChange={e => setKaplanText(e.target.value)}
+            placeholder={"Answered 810 of 1000\nSim 1 74% 9/20 100/112 min\nSim 2 68% 9/22 105/112 min"}
+            className="w-full border border-slate-200/60 rounded-xl px-4 py-3 text-sm bg-slate-50/80 h-20 resize-y font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
+          <p className="text-[11px] text-slate-400 mt-1">Only this sponsor&apos;s sims (Kaplan logins are shared). One per line: name, score %, date, minutes used/allowed.{effectiveWriter !== "api" ? " The free writers can't read screenshots, so type them here." : ""}</p>
+        </div>
+
+        <div className="mb-5">
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Upload Study Reports</label>
           <div
             onClick={() => fileInputRef.current?.click()}
@@ -1082,7 +1120,7 @@ export default function Home() {
         </div>
 
         <button onClick={parseNotes}
-          disabled={parsing || (!parserName.trim() && !notes.trim() && uploadedFiles.length === 0)}
+          disabled={parsing || (!parserName.trim() && !notes.trim() && uploadedFiles.length === 0 && !kaplanText.trim())}
           className="bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-7 py-3 rounded-xl text-sm font-semibold hover:from-indigo-700 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md btn-press">
           {parsing ? (
             <span className="flex items-center gap-3">
@@ -1092,7 +1130,7 @@ export default function Home() {
           ) : (
             <span className="flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-              Get AI Suggestions
+              {effectiveWriter === "api" ? "Get AI Suggestions" : "Build Plan"}
             </span>
           )}
         </button>
@@ -1549,7 +1587,7 @@ export default function Home() {
           <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white px-6 py-4 flex justify-between items-center">
             <h2 className="font-bold flex items-center gap-2 text-lg">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-              Team Email
+              {teamIsPrompt ? "Team Email — prompt for the Claude app" : "Team Email"}
             </h2>
             <button onClick={copyEmail}
               className="bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-xl text-sm font-medium transition-all btn-press flex items-center gap-2">
@@ -1560,6 +1598,11 @@ export default function Home() {
               )}
             </button>
           </div>
+          {teamIsPrompt && (
+            <div className="bg-emerald-50/70 border-b border-emerald-100 px-6 py-3 text-sm text-emerald-800">
+              Copy this, paste it into a new chat in the Claude app, and it writes the email. Every number inside is already computed — no API credits used.
+            </div>
+          )}
           <div className="border-l-4 border-l-emerald-200">
             <pre className="whitespace-pre-wrap text-sm text-slate-800 p-8 font-sans leading-loose">
               {generatedEmail}
@@ -1582,7 +1625,7 @@ export default function Home() {
               <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-6 py-4 flex justify-between items-center">
                 <h3 className="font-bold flex items-center gap-2 text-lg">
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-xs font-bold">{i + 1}</div>
-                  Email to {se.name}
+                  {se.isPrompt ? `Prompt for ${se.name}'s email` : `Email to ${se.name}`}
                 </h3>
                 <button onClick={() => copySponsorEmail(i)}
                   className="bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-xl text-sm font-medium transition-all btn-press flex items-center gap-2">
@@ -1593,6 +1636,11 @@ export default function Home() {
                   )}
                 </button>
               </div>
+              {se.isPrompt && (
+                <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 text-sm text-slate-600">
+                  Copy this into a new chat in the Claude app — it writes the email. The promise below is already saved, so the next upload grades it.
+                </div>
+              )}
               {se.checkpoint && (
                 <div className="bg-indigo-50/70 border-b border-indigo-100 px-6 py-3 text-sm text-indigo-800">
                   <span className="font-semibold">Promise this email sets:</span> {se.checkpoint}

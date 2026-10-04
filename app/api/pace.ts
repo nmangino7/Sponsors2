@@ -34,6 +34,7 @@ export interface PaceFacts {
   examDate: string | null;
   bookDeadline: string | null;
   usingFloor: boolean;
+  targetUnreachable: boolean; // the 2-week target would need more than CRITICAL min/day
   deadlinePassed: boolean; // even the 5-day floor is behind us
   examPassed: boolean; // the exam date is before today
   daysToDeadline: number | null;
@@ -108,6 +109,7 @@ export function computePace(input: PaceInput): PaceFacts {
   let bookDeadline: string | null = null;
   let daysToDeadline: number | null = null;
   let usingFloor = false;
+  let targetUnreachable = false;
   let deadlinePassed = false;
   let examPassed = false;
   let exam: Date | null = null;
@@ -119,10 +121,17 @@ export function computePace(input: PaceInput): PaceFacts {
       const target = new Date(e.getTime() - BOOK_DEADLINE_TARGET_DAYS * DAY);
       const floor = new Date(e.getTime() - BOOK_DEADLINE_FLOOR_DAYS * DAY);
       let deadline = target;
-      // If the 2-week target is already gone, slide toward the 5-day floor.
-      if (daysBetween(today, target) < 1) {
+      // If the 2-week target is already gone — or would take more than 3 hours of reading a
+      // day — slide to the 5-day floor (Nick's rule: book done 5 days to a week before the test).
+      const leftMin = readingMinutesLeft ?? (pagesRemaining !== null ? pagesRemaining * MINUTES_PER_PAGE : null);
+      const toTarget = daysBetween(today, target);
+      if (toTarget < 1) {
         deadline = floor;
         usingFloor = true;
+      } else if (leftMin !== null && leftMin / toTarget > CRITICAL_MINUTES_PER_DAY) {
+        deadline = floor;
+        usingFloor = true;
+        targetUnreachable = true;
       }
       let d = daysBetween(today, deadline);
       examPassed = daysBetween(today, e) < 0;
@@ -230,6 +239,7 @@ export function computePace(input: PaceInput): PaceFacts {
     examDate: input.examDate ?? null,
     bookDeadline,
     usingFloor,
+    targetUnreachable,
     deadlinePassed,
     examPassed,
     daysToDeadline,
@@ -286,7 +296,9 @@ export function formatPaceFacts(p: PaceFacts): string {
   } else if (p.bookDeadline && p.daysToDeadline) {
     L.push(`- Exam date: ${p.examDate}. BOOK DEADLINE: ${p.bookDeadline} (${p.daysToDeadline} day(s) of reading left).`);
     if (p.usingFloor) {
-      L.push("- NOTE: the ideal 2-week-before target has already passed, so this deadline is the 5-day floor. They are late — say so directly.");
+      L.push(p.targetUnreachable
+        ? "- NOTE: the ideal 2-week-before target would take more than 3 hours of reading a day, so this deadline is the 5-day floor. They are late — say so directly."
+        : "- NOTE: the ideal 2-week-before target has already passed, so this deadline is the 5-day floor. They are late — say so directly.");
     }
     if (p.requiredMinutesPerDay !== null) {
       const pagesPart = p.requiredPagesPerDay !== null ? ` (about ${p.requiredPagesPerDay} pages/day)` : "";

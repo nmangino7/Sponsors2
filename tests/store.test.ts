@@ -16,11 +16,11 @@ test("nameKey normalizes case, accents and punctuation", () => {
 
 test("matching prefers the Achievable UUID, then the name — and never steals another account", async () => {
   const s = new MemoryStore();
-  const a = await s.createSponsor({ name: "Kyle Brainerd", achievableUuid: "uuid-a", exam: "SIE" });
+  const a = await s.createSponsor({ name: "Pat Example", achievableUuid: "uuid-a", exam: "SIE" });
   const b = await s.createSponsor({ name: "Pat Lee" });
   assert.equal((await s.findSponsor({ achievableUuid: "uuid-a", name: "someone else" }))?.id, a.id);
   assert.equal((await s.findSponsor({ name: "pat  LEE" }))?.id, b.id);
-  assert.equal(await s.findSponsor({ name: "Kyle Brainerd", achievableUuid: "uuid-other" }), null,
+  assert.equal(await s.findSponsor({ name: "Pat Example", achievableUuid: "uuid-other" }), null,
     "same name, different Achievable account = a different person");
   assert.equal((await s.findSponsor({ name: "Pat Lee", achievableUuid: "uuid-new" }))?.id, b.id,
     "a name match is fine when the stored sponsor has no UUID yet");

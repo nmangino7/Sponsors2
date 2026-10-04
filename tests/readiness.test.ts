@@ -26,7 +26,7 @@ test("real Phase-1 report: reading stalled + comfort quizzing, never tested but 
   assert.equal(r.last4AvgMin, 147);
 });
 
-test("the Villacres case is NOT ready: 80s on practice, but rushed, bank-burned, and failed twice", () => {
+test("the 80s-on-practice-but-failed case is NOT ready: 80s on practice, but rushed, bank-burned, and failed twice", () => {
   const today = "2026-09-20";
   const report = makeReport({
     readiness: 89, reportDate: today,

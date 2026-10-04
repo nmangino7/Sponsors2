@@ -7,7 +7,7 @@ export function makeReport(o: Partial<ReportData> = {}): ReportData {
     pagesRead: 150, pagesTotal: 150, readingMinutesLeft: 0, fullLengthCounter: 0, readiness: 60,
     targetDate: null, planStatus: null, overdueMinutes: null,
     quiz7d: { questions: null, accuracy: null, topics: [] }, exam7d: { questions: null, accuracy: null, topics: [] },
-    attempts: [], daily: [], careerQuestions: null, activeDays: null, firstActivity: null, lastAccess: null, studyWindowEmpty: false, tooFastFlags: 0, missing: [],
+    attempts: [], daily: [], careerQuestions: null, activeDays: null, firstActivity: null, lastAccess: null, planReading: [], studyWindowEmpty: false, tooFastFlags: 0, missing: [],
     ...o,
   };
 }

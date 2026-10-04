@@ -66,6 +66,7 @@ export interface ReportData {
   activeDays: number | null;
   firstActivity: string | null; // first day on the platform ("Accessed from"), else earliest daily entry
   lastAccess: string | null; // last day on the platform ("Accessed from X to Y")
+  planReading: { section: string; minutes: number }[]; // Achievable's own next reading assignment (STUDY PLAN)
   studyWindowEmpty: boolean; // the 1-month STUDY TIME BREAKDOWN is present but has no study days
   tooFastFlags: number;
   missing: string[];
@@ -188,6 +189,20 @@ function parseAttempts(seg: string): PracticeAttempt[] {
   return out;
 }
 
+/** STUDY PLAN → "Read textbook": the sections Achievable assigns next ("9.3.7 Index options 12m"). */
+function parsePlanReading(t: string): { section: string; minutes: number }[] {
+  const plan = between(t, "STUDY PLAN", "SUMMARIES");
+  const i = plan.indexOf("Read textbook");
+  if (i < 0) return [];
+  const block = plan.slice(i + "Read textbook".length).split(/\n\s*(?:Practice exams|Quizzes|Reviews?|(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,)/)[0];
+  const out: { section: string; minutes: number }[] = [];
+  for (const m of block.matchAll(/(\d+(?:\.\d+)+)\s+([^\n]+?)\s*\n?\s*(\d+)m\b/g)) {
+    out.push({ section: `${m[1]} ${m[2].trim()}`, minutes: +m[3] });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
 function resolveTargetDate(raw: string, reportDate: string | null): string | null {
   const m = raw.match(/([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?/);
   if (!m) return null;
@@ -244,6 +259,7 @@ export function extractReport(rawText: string): ReportData {
     careerQuestions: num(t.match(/QUIZ QUESTIONS\s+Total:\s*(\d+)/)),
     activeDays: num(t.match(/with\s+(\d+)\s+distinct days of activity/)),
     firstActivity: null,
+    planReading: parsePlanReading(t),
     lastAccess: (t.match(/Accessed from\s+\d{4}-\d{2}-\d{2}\s+to\s+(\d{4}-\d{2}-\d{2})/) || [])[1] ?? null,
     studyWindowEmpty: false,
     tooFastFlags: (between(t, "TEXTBOOK PROGRESS").match(/too fast/gi) || []).length,
@@ -282,6 +298,6 @@ export function emptyReport(): ReportData {
     studyMin: null, readingMin: null, quizMin: null, examMin: null, pagesRead: null, pagesTotal: null,
     readingMinutesLeft: null, fullLengthCounter: null, readiness: null, targetDate: null, planStatus: null,
     overdueMinutes: null, quiz7d: s(), exam7d: s(), attempts: [], daily: [], careerQuestions: null,
-    activeDays: null, firstActivity: null, lastAccess: null, studyWindowEmpty: false, tooFastFlags: 0, missing: [],
+    activeDays: null, firstActivity: null, lastAccess: null, planReading: [], studyWindowEmpty: false, tooFastFlags: 0, missing: [],
   };
 }

@@ -44,7 +44,7 @@ test("exam-phase checkpoint counts new timed exams at the minimum score", () => 
   const today = "2026-09-20";
   const report = makeReport({ reportDate: today, daily: activeOn([today]), attempts: [fullExam("Final exam A", "2026-09-18", 74)] });
   const pace = computePace({ pagesRead: 150, pagesTotal: 150, readingMinutesLeft: 0, examDate: "2026-10-15", today: d(today) });
-  const readiness = assessReadiness({ report, pace, exam: "SIE" });
+  const readiness = assessReadiness({ report, pace, exam: "SIE", examDate: "2026-10-15" });
   const cp = buildCheckpoint({ report, pace, readiness, today });
   assert.equal(cp.metric, "timed_full_lengths");
   assert.equal(cp.baseline, 1);
@@ -53,7 +53,7 @@ test("exam-phase checkpoint counts new timed exams at the minimum score", () => 
 
   const later = (scores: number[]) => {
     const r2 = makeReport({ reportDate: "2026-09-24", daily: activeOn(["2026-09-24"]), attempts: [fullExam("Final exam A", "2026-09-18", 74), ...scores.map((s, i) => fullExam(`SIE full exam ${i}`, `2026-09-2${i + 1}`, s))] });
-    const rd2 = assessReadiness({ report: r2, pace, exam: "SIE" });
+    const rd2 = assessReadiness({ report: r2, pace, exam: "SIE", examDate: "2026-10-15" });
     return evaluateCheckpoint(cp, { report: r2, readiness: rd2, today: "2026-09-24" });
   };
   assert.equal(later([78, 81]).status, "HIT");

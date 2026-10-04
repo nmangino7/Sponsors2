@@ -48,7 +48,7 @@ test("after a pass with no next date: congratulate, and the promise is the next 
 
 test("after a fail: debrief and retake date within 48 hours", () => {
   const dg = diag({ examDate: "2026-09-24", sits: [{ examType: "SIE", date: "2026-09-24", outcome: "FAIL", predictedAtSit: 74 }] });
-  assert.match(formatAllFacts(dg, "team"), /FAILED SIE on 2026-09-24.*retake date set within 48 hours/);
+  assert.match(formatAllFacts(dg, "team"), /FAILED SIE on 2026-09-24.*next exam date \(retake or the next exam in their path\) set within 48 hours/);
 });
 
 test("exam within a week without the gold standard: a go/no-go call for the team, never shown to the sponsor", () => {
@@ -62,4 +62,44 @@ test("the dormant / Phase 1 promise logic is unchanged by the new exam-date bran
   const report = makeReport({ reportDate: today, pagesRead: 60, daily: activeOn([today]) });
   const pace = computePace({ pagesRead: 60, pagesTotal: 150, readingMinutesLeft: 500, examDate: "2026-11-20", today: d(today) });
   assert.equal(buildCheckpoint({ report, pace, readiness: assessReadiness({ report, pace, examDate: "2026-11-20" }), today }).metric, "pages_read");
+});
+
+test("no exam date on file: the promise is booking one", () => {
+  const today = "2026-10-04";
+  const report = makeReport({ reportDate: today, pagesRead: 14, pagesTotal: 150, readingMinutesLeft: 900, daily: activeOn([today]) });
+  const pace = computePace({ pagesRead: 14, pagesTotal: 150, readingMinutesLeft: 900, examDate: null, today: d(today) });
+  const cp = buildCheckpoint({ report, pace, readiness: assessReadiness({ report, pace, exam: "LAH" }), today });
+  assert.equal(cp.metric, "exam_scheduled");
+  assert.equal(cp.text, "Book your LAH and reply with the date by Wednesday 10/7.");
+});
+
+// Found by running the real off-track roster through the app (10/4).
+test("an unreachable 2-week target slides to the 5-day floor instead of an 8-hour quota", () => {
+  // 26/150 pages, exam 10/20: the 10/6 target would need ~62 pages (8 hours) a day.
+  const p = computePace({ pagesRead: 26, pagesTotal: 150, examDate: "2026-10-20", today: d("2026-10-04") });
+  assert.equal(p.usingFloor, true);
+  assert.equal(p.targetUnreachable, true);
+  assert.equal(p.bookDeadline, "2026-10-15");
+  assert.equal(p.requiredPagesPerDay, 12);
+  const healthy = computePace({ pagesRead: 120, pagesTotal: 150, examDate: "2026-10-31", today: d("2026-10-04") });
+  assert.equal(healthy.usingFloor, false, "a reachable target stays the 2-week target");
+});
+
+test("timed exams below the cut turn the dot red, even with only two of them", () => {
+  const today = "2026-10-04";
+  const attempts = [fullExam("SIE full exam", "2026-10-02", 64), fullExam("Final exam B", "2026-09-30", 63), fullExam("Final exam A", "2026-09-28", 77, 316, 105)];
+  const r = assessReadiness({ report: makeReport({ reportDate: today, daily: activeOn(["2026-10-03", today]), attempts }), pace: donePace(today, "2026-10-13"), exam: "SIE", examDate: "2026-10-13" });
+  assert.equal(r.dot, "red");
+  assert.ok(r.failureModes.includes("plateau_below_cut"));
+  assert.equal(r.goNoGo, true, "9 days out without the gold standard");
+});
+
+test("no Achievable data is not 'not started'; a fail with no next date is red", () => {
+  const today = "2026-10-04";
+  const report = makeReport({ reportDate: today, exam: null, course: null, pagesRead: null, pagesTotal: null, readingMinutesLeft: null, studyMin: null, readingMin: null, quizMin: null });
+  const pace = computePace({ pagesRead: null, pagesTotal: null, examDate: null, today: d(today) });
+  const r = assessReadiness({ report, pace, exam: "LAH", realSits: [{ examType: "SIE", date: "2026-09-24", outcome: "FAIL", predictedAtSit: 79 }] });
+  assert.ok(!r.failureModes.includes("not_started"));
+  assert.equal(r.dot, "red");
+  assert.match(r.dotReason, /failed SIE 09\/24 — no next exam date/);
 });

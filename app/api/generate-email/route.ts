@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { MANAGER_INITIALS, STUDY_RESOURCES, STUDY_METHODOLOGY, PHASE_DETECTION, SPECIFICITY_INSTRUCTIONS, FAILURE_MODE_PLAYBOOK } from "../context";
 import { MODEL_EMAIL, createMessage, extractText, friendlyError, logUsage, withRetry } from "../anthropic";
 import { computePace, formatPaceFacts, parseDurationToMinutes } from "../pace";
-import { formatAllFacts, loadDiagnosis, syncSponsorFromCard, reportAgeDays, STALE_REPORT_DAYS } from "../diagnose";
+import { formatAllFacts, loadDiagnosis, syncSponsorFromCard, reportAgeDays, STALE_REPORT_DAYS, cardDiagnosis } from "../diagnose";
+import { parseWriter, teamEmail, type TeamEntry } from "../templates";
 import { getStore } from "../store";
 import { requireUser } from "../guard";
 
@@ -45,13 +46,15 @@ export async function POST(req: NextRequest) {
   if (user instanceof NextResponse) return user;
 
   try {
-    const { startDay, date, sponsors, scoreEntries } = await req.json();
+    const { startDay, date, sponsors, scoreEntries, writer: writerIn } = await req.json();
+    const writer = parseWriter(writerIn);
 
     const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     const idx = ALL_DAYS.indexOf(startDay || "Monday");
     const days = [0, 1, 2, 3].map(i => ALL_DAYS[(idx + i) % 7]);
 
     let scoreSummary = "";
+    let tableBlock = "";
     if (scoreEntries?.length > 0) {
       const byName: Record<string, typeof scoreEntries> = {};
       for (const e of scoreEntries) {
@@ -59,7 +62,6 @@ export async function POST(req: NextRequest) {
         if (!byName[key]) byName[key] = [];
         byName[key].push(e);
       }
-      let tableBlock = "";
       for (const [name, entries] of Object.entries(byName)) {
         tableBlock += `\n  ${name}:\n`;
         for (const e of entries as { date: string; sponsor: string; platform: string; scoreType: string; score: number; section: string; notes: string }[]) {
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     const store = getStore();
-    const sponsorBlocks = (await Promise.all((sponsors as SponsorInput[])
+    const built = await Promise.all((sponsors as SponsorInput[])
       .map(async (s, i) => {
         const actionLines = s.actions
           .map((a: string, j: number) => `  - ${days[j]}: ${a || "[No task entered]"}`)
@@ -95,7 +97,8 @@ export async function POST(req: NextRequest) {
               examDate: s.examDate || null,
             }));
 
-        return `SPONSOR ${i + 1}: ${s.name}
+        const entry: TeamEntry = { card: s, d: d ?? (s.pagesRead != null ? cardDiagnosis(s) : null), staleNote: stale ? stale.trim() : undefined };
+        return { entry, block: `SPONSOR ${i + 1}: ${s.name}
 Current Exam: ${s.exam}
 ${facts}
 ${s.achievableStatus ? `Achievable plan status (quote as-is): "${s.achievableStatus}"` : ""}
@@ -103,9 +106,14 @@ Current Status/Score: ${s.status}
 Key Issues: ${s.issues}
 Draft Daily Action Plan (upgrade to phase-correct, time-estimated tasks):
 ${actionLines}
-What I Need from DM: ${s.dmNeeds}`;
-      })))
-      .join("\n\n---\n\n");
+What I Need from DM: ${s.dmNeeds}` };
+      }));
+    const sponsorBlocks = built.map(b => b.block).join("\n\n---\n\n");
+
+    // Free: the built-in writer — no AI call, no credits.
+    if (writer === "free") {
+      return NextResponse.json({ email: teamEmail(built.map(b => b.entry), days, date, tableBlock), writer });
+    }
 
     const prompt = `Generate the team email. For EACH sponsor, use the PHASE, failure mode and checkpoint facts given (work the phase out yourself only when no READINESS FACTS are provided), then build that sponsor's plan for that phase only. Be direct and give high direction — specific, time-estimated daily tasks. Today's date: ${date}.
 
@@ -145,6 +153,11 @@ HARD REQUIREMENTS:
 - Never recommend moving a sponsor's exam date; ramp the daily load instead and flag the DM.
 - The gold standard for "ready" is 3 timed full exams in the 80s, at real pace, on fresh questions, calibrated 80+ — READINESS FACTS decides it.
 - Plain text (no HTML). Spacious and scannable.`;
+
+    // Claude app: hand back the full prompt to paste into the Claude app (covered by the plan you already have).
+    if (writer === "claude-app") {
+      return NextResponse.json({ prompt: `${SYSTEM_PROMPT}\n\n---\n\n${prompt}`, writer });
+    }
 
     const message = await withRetry(() => createMessage({
       model: MODEL_EMAIL,

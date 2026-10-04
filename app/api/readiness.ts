@@ -9,7 +9,9 @@ import type { PaceFacts } from "./pace.ts";
 export const CUT_SCORES: Record<string, number> = { SIE: 70, "63": 72, "65": 72, "66": 73, "7": 72, LAH: 70 };
 export const BANK_BURNOUT_EXPOSURE = 0.7; // above this, sims measure recall of seen questions
 export const FAST_FINISH_RATIO = 0.6; // minutes used / allowed below this = rushing
-export const UNTIMED_RATIO = 1.1; // used / allowed above this = taken off the clock (paused, multiple sittings)
+export const UNTIMED_RATIO = 1.1;
+export const GO_NO_GO_DAYS = 10;
+export const RECENT_SIT_DAYS = 21; // after-pass / after-fail steps apply this long after a real exam // exam this close without the gold standard -> the team makes the call // used / allowed above this = taken off the clock (paused, multiple sittings)
 const QUIZ_HAIRCUT = 12; // untimed quiz accuracy over-reads exam conditions
 const READY_BAR = 80;
 
@@ -131,6 +133,8 @@ export interface Readiness {
   untimed: TimedAttempt[]; // full exams that ran past the clock — shown, never counted
   daysToExam: number | null; // negative once the exam date has passed
   lastSit: RealSit | null; // newest real exam, any exam type
+  recentSit: RealSit | null; // lastSit when it's within RECENT_SIT_DAYS and no later exam date is set
+  goNoGo: boolean; // exam within GO_NO_GO_DAYS and the gold standard isn't met
 }
 
 const DAY = 86400000;
@@ -314,18 +318,19 @@ export function assessReadiness(input: ReadinessInput): Readiness {
   const anyStudy = report.daily.some(d => d.totalMin > 0) || (report.studyMin ?? 0) > 0;
   if (examDate && daysBetween(examDate, today) > 0 && !sits.some(s => s.date >= examDate)) modes.add("result_missing");
   if (UNPAID.test(notes)) modes.add("materials_unpaid");
-  if (!anyStudy && (report.pagesRead ?? 0) === 0 && timed.length === 0) modes.add("not_started");
+  // Only when Achievable actually shows zero — no data (e.g. LAH isn't on Achievable) is not "not started".
+  if (!anyStudy && report.pagesRead === 0 && timed.length === 0) modes.add("not_started");
   if (darkDays !== null && darkDays >= 7) modes.add("dormant");
   if (bingeAndVanish(report.daily, today)) modes.add("binge_and_vanish");
   if (!pace.bookDone && (pace.stalled || (pace.finishVsDeadlineDays ?? 0) > 0 || (pace.finishVsExamDays ?? 0) > 0)) modes.add("reading_stalled");
   if (!pace.bookDone && report.quizMin !== null && report.readingMin && report.quizMin >= 1.5 * report.readingMin) modes.add("comfort_quizzing");
   if (bankBurnout) modes.add("bank_burnout");
-  if (last3.length >= 3 && last3.every(t => t.score < cut) && Math.max(...last3.map(t => t.score)) - Math.min(...last3.map(t => t.score)) <= 6) modes.add("plateau_below_cut");
+  if (last3.length >= 2 && last3.every(t => t.score < cut) && Math.max(...last3.map(t => t.score)) - Math.min(...last3.map(t => t.score)) <= 6) modes.add("plateau_below_cut");
   if (pace.bookDone && neverTested) modes.add("never_tested");
   const failureModes = MODE_PRIORITY.filter(m => modes.has(m));
 
   // Upgraded gold standard: 3 full exams in the 80s, taken timed at real pace, on fresh
-  // questions, with calibrated readiness at the bar. (The Villacres fix.)
+  // questions, with calibrated readiness at the bar. (Fixes the "80s on practice, failed the real exam" pattern.)
   // Only the 3 most recent count: old 80s don't offset a slide below the cut.
   const qualifying = last3.filter(t => t.score >= READY_BAR && (t.speedRatio === null || t.speedRatio >= FAST_FINISH_RATIO)).length;
   const gaps: GoldGap[] = [];
@@ -357,12 +362,18 @@ export function assessReadiness(input: ReadinessInput): Readiness {
   // Dot (fga-sponsors): on track = pace meets need AND activity in the last 2 days.
   let dot: Readiness["dot"];
   let dotReason: string;
-  if (!anyStudy && report.pagesRead === null) {
-    dot = "grey";
-    dotReason = "no study data";
+  const lastSit = [...(input.realSits ?? [])].sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
+  const recentSit = lastSit && (!examDate || examDate <= lastSit.date) && daysBetween(lastSit.date, today) <= RECENT_SIT_DAYS ? lastSit : null;
+  const failedNoDate = recentSit?.outcome === "FAIL";
+  if (failedNoDate) {
+    dot = "red";
+    dotReason = `failed ${lastSit!.examType} ${lastSit!.date.slice(5).replace("-", "/")} — no next exam date`;
   } else if (failureModes.includes("result_missing")) {
     dot = "grey";
     dotReason = "exam date passed — result not recorded";
+  } else if (!anyStudy && report.pagesRead === null) {
+    dot = "grey";
+    dotReason = "no study data";
   } else if (darkDays !== null && darkDays > 2) {
     dot = "red";
     dotReason = `no activity in ${darkDays} days`;
@@ -372,6 +383,9 @@ export function assessReadiness(input: ReadinessInput): Readiness {
   } else if (failureModes.some(m => m === "materials_unpaid" || m === "plateau_below_cut" || m === "bank_burnout")) {
     dot = "red";
     dotReason = MODE_LABEL[failureModes.find(m => m === "materials_unpaid" || m === "plateau_below_cut" || m === "bank_burnout")!];
+  } else if (pace.bookDone && trailing3 !== null && trailing3 < cut) {
+    dot = "red";
+    dotReason = `timed exams below the cut (avg ${round1(trailing3)} vs ${cut})`;
   } else {
     dot = "green";
     dotReason = pace.bookDone ? "book done, active" : "on pace, active";
@@ -408,7 +422,9 @@ export function assessReadiness(input: ReadinessInput): Readiness {
     calibrationReason,
     untimed,
     daysToExam: examDate ? daysBetween(today, examDate) : null,
-    lastSit: [...(input.realSits ?? [])].sort((a, b) => b.date.localeCompare(a.date))[0] ?? null,
+    lastSit,
+    recentSit,
+    goNoGo: !!examDate && daysBetween(today, examDate) >= 0 && daysBetween(today, examDate) <= GO_NO_GO_DAYS && !goldStandard.met,
   };
 }
 

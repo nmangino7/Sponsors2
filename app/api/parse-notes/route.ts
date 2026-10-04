@@ -4,7 +4,9 @@ import { MODEL_PARSE, createMessage, extractText, friendlyError, logUsage, withR
 import { extractReport, emptyReport, type ReportData } from "../report-extract";
 import { parseDurationToMinutes } from "../pace";
 import type { KaplanData } from "../readiness";
-import { computeDiagnosis, diagnosisSummary, formatAllFacts, refreshDiagnosis } from "../diagnose";
+import { computeDiagnosis, diagnosisSummary, formatAllFacts, refreshDiagnosis, loadDiagnosis, type Diagnosis } from "../diagnose";
+import { draftPlan, parseWriter } from "../templates";
+import { parseKaplanText } from "../kaplan-text";
 import { getStore } from "../store";
 import { nameKey } from "../store-model";
 import { requireUser } from "../guard";
@@ -81,7 +83,10 @@ export async function POST(req: NextRequest) {
   if (user instanceof NextResponse) return user;
 
   try {
-    const { notes, startDay, sponsorName, exam, images, scoreEntries, examDate, reportText, sponsorId } = await req.json();
+    const { notes, startDay, sponsorName, exam, images, scoreEntries, examDate, reportText, sponsorId, kaplanText, writer: writerIn } = await req.json();
+    // Free (default) and Claude-app modes never call the API: the plan comes from the built-in writer.
+    const writer = parseWriter(writerIn);
+    const manualKaplan = parseKaplanText(kaplanText);
     const store = getStore();
 
     const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -117,6 +122,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Preliminary diagnosis from memory + the deterministic read, so the draft plan is phase-correct.
     let prelimFacts = "";
+    let prelimDiag: Diagnosis | null = null;
     if (extracted && !extracted.missing.some(f => f === "pagesRead" || f === "pagesTotal")) {
       const snaps = sponsor ? await store.snapshots(sponsor.id, 5) : [];
       const reportDate = extracted.reportDate ?? today();
@@ -130,6 +136,7 @@ export async function POST(req: NextRequest) {
       });
       // Sponsor-audience facts: the draft's status/issues text later feeds the sponsor email.
       prelimFacts = formatAllFacts(prelim, "sponsor");
+      prelimDiag = prelim;
     }
 
     let scoreContext = "";
@@ -199,7 +206,9 @@ RULES:
     // if the AI step fails (credits, outage), still save the report and return the diagnosis.
     let responseText = "";
     let aiError: string | null = null;
-    try {
+    if (writer !== "api") {
+      if (images?.length) aiError = "Screenshots can only be read with the Claude API writer — type the Kaplan numbers into the Kaplan box instead.";
+    } else try {
       const message = await withRetry(() => createMessage({
         model: MODEL_PARSE,
         max_tokens: 4000,
@@ -222,20 +231,25 @@ RULES:
       try { if (m) parsed = JSON.parse(m[0]); } catch { /* fall through: no draft plan */ }
     }
     const llm = parsed.sponsors?.[0];
-    if (!llm && !extracted) {
+    if (!llm && !extracted && writer === "api" && !manualKaplan) {
       return NextResponse.json({ sponsors: [], error: "Could not parse AI response" }, { status: 200 });
     }
 
     // 4. Merge, remember, diagnose.
     const report = mergeReport(extracted ?? emptyReport(), llm);
-    const kaplan = cleanKaplan(llm?.kaplan);
+    const kaplan = manualKaplan ?? cleanKaplan(llm?.kaplan); // typed numbers beat a screenshot read
     // The name printed on the report is the identity; a typed name is for screenshots/notes.
     const name = (extracted?.name || sponsorName || report.name || llm?.name || "").trim();
     const theExam = examPick || llm?.exam || null;
     const theExamDate = examDate || (llm?.examDate && /^\d{4}-\d{2}-\d{2}$/.test(llm.examDate) ? llm.examDate : null) || report.targetDate || null;
 
+    if (writer !== "api" && !extracted && !name) {
+      return NextResponse.json({ sponsors: [], error: "Nothing to work with yet: upload the Achievable report PDF, or type the sponsor's name to add notes or Kaplan numbers." }, { status: 200 });
+    }
+
     let summary = null;
     let sponsorRecord = null;
+    let finalD: Diagnosis | null = null;
     if (name && !sponsor) {
       // Second chance: the name may only be known now (typed, or read from a screenshot by the model).
       sponsor = await store.findSponsor({ achievableUuid: report.achievableUuid, name });
@@ -274,14 +288,22 @@ RULES:
             dot: prelim.readiness.dot, data: { ...report, reportDate }, kaplan, createdBy: user.email,
           });
         }
-        const d = await refreshDiagnosis(store, sponsor.id);
-        if (d) summary = diagnosisSummary(d);
+        finalD = await refreshDiagnosis(store, sponsor.id);
       }
+      // Notes-only (or Kaplan-only) upload for someone already on file: diagnose from memory.
+      if (!finalD) finalD = await loadDiagnosis(store, sponsor.id);
+      if (finalD) summary = diagnosisSummary(finalD);
       sponsorRecord = { id: sponsor.id, name: sponsor.name, matched, snapshotCount: (await store.snapshots(sponsor.id, 50)).length };
     }
 
+    // No AI draft (free writer, or the AI step failed): the built-in writer drafts the plan.
+    const base = finalD ?? prelimDiag;
+    const draft = !llm && base ? draftPlan(base, days) : null;
+
     const out = {
       ...(llm ?? {}),
+      ...(draft ?? {}),
+      currentChapter: llm?.currentChapter || report.planReading[0]?.section || "",
       name: llm?.name || name,
       exam: theExam ?? "SIE",
       examDate: sponsor?.examDate ?? theExamDate ?? "", // the date the diagnosis used

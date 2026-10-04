@@ -19,5 +19,6 @@ export async function GET() {
     authConfigured: configured,
     devBypass: devBypass(env),
     memory: getStore().kind,
+    aiKey: !!env.ANTHROPIC_API_KEY, // the paid Claude API writer is only offered when a key is set
   });
 }

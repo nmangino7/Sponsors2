@@ -7,7 +7,8 @@ import type { PaceFacts } from "./pace.ts";
 import type { Readiness, KaplanData, RealSit } from "./readiness.ts";
 import type { Checkpoint, CheckpointResult } from "./checkpoint.ts";
 import type { Store, SponsorRow, SnapshotRow, EmailRow, NoteRow, RealSitRow } from "./store-model.ts";
-import { computePace, formatPaceFacts } from "./pace.ts";
+import { computePace, formatPaceFacts, parseDurationToMinutes } from "./pace.ts";
+import { emptyReport } from "./report-extract.ts";
 import { assessReadiness, formatReadinessFacts, MODE_LABEL } from "./readiness.ts";
 import { buildCheckpoint, evaluateCheckpoint, missStreak, formatCheckpointFacts } from "./checkpoint.ts";
 
@@ -85,6 +86,25 @@ export interface LoadedDiagnosis extends Diagnosis {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A sponsor typed into the plan without a report on file: diagnose from the card's own fields
+ *  so the free writer still has the pace math. Nothing is saved for these. */
+export function cardDiagnosis(card: {
+  name?: string; exam?: string | null; examDate?: string | null; pagesRead?: number | null; pagesTotal?: number | null;
+  readingTimeLeft?: string | null; readingTimeHours?: number | null; quizTimeHours?: number | null; notes?: string[];
+}, today: string = new Date().toISOString().slice(0, 10)): Diagnosis {
+  const report: ReportData = {
+    ...emptyReport(), name: card.name ?? null, exam: card.exam ?? null, reportDate: today,
+    pagesRead: card.pagesRead ?? null, pagesTotal: card.pagesTotal ?? null,
+    readingMinutesLeft: parseDurationToMinutes(card.readingTimeLeft),
+    readingMin: card.readingTimeHours != null ? card.readingTimeHours * 60 : null,
+    quizMin: card.quizTimeHours != null ? card.quizTimeHours * 60 : null,
+  };
+  return computeDiagnosis({
+    report, kaplan: null, today, exam: card.exam ?? null, examDate: card.examDate && ISO_DATE.test(card.examDate) ? card.examDate : null,
+    previous: null, sits: [], notes: card.notes ?? [], emails: [],
+  });
+}
+
 /** A promise set from an old report is already overdue — the sponsor email needs a fresh one. */
 export const STALE_REPORT_DAYS = 3;
 
@@ -160,16 +180,16 @@ export function formatAllFacts(d: Diagnosis, audience: "sponsor" | "team"): stri
     formatCheckpointFacts(d.lastResult, d.streak, d.next, audience),
   ];
   const r = d.readiness;
-  const sit = r.lastSit;
-  if (sit && (!d.examDate || d.examDate <= sit.date)) {
+  const sit = r.recentSit;
+  if (sit) {
     // The newest real exam is the latest event and no later exam date is set yet.
     parts.push(sit.outcome === "PASS"
       ? `REAL EXAM: PASSED ${sit.examType} on ${sit.date}. Open with congratulations, then lock in the next exam — set its date now (momentum drops right after a pass).`
       : sit.outcome === "FAIL"
-        ? `REAL EXAM: FAILED ${sit.examType} on ${sit.date}. Debrief within a day, build the plan from the weakest sections of their score report, and get the retake date set within 48 hours.`
+        ? `REAL EXAM: FAILED ${sit.examType} on ${sit.date}. Debrief within a day, build the plan from the weakest sections of their score report, and get the next exam date (retake or the next exam in their path) set within 48 hours.`
         : `REAL EXAM: ${sit.examType} on ${sit.date}, result pending — ask for the score report.`);
   }
-  if (audience === "team" && r.daysToExam !== null && r.daysToExam >= 0 && r.daysToExam <= 7 && !r.goldStandard.met) {
+  if (audience === "team" && r.goNoGo) {
     parts.push(`GO/NO-GO DECISION NEEDED (team only): exam in ${r.daysToExam} day(s) and the gold standard is NOT met (${r.goldStandard.gaps.map(g => g.text).join("; ")}). The owner makes the call today and relays it to the sponsor the same day — never let a no-go go unsent.`);
   }
   if (audience === "sponsor") {
@@ -198,7 +218,7 @@ export function diagnosisSummary(d: Diagnosis) {
     goldStandard: { met: r.goldStandard.met, gaps: r.goldStandard.gaps.map(g => g.text) },
     flags: { rushing: r.rushing, bankBurnout: r.bankBurnout, bankExposure: r.bankExposure, speedRatio: r.speedRatio, untimed: r.untimed.length },
     daysToExam: r.daysToExam,
-    goNoGo: r.daysToExam !== null && r.daysToExam >= 0 && r.daysToExam <= 7 && !r.goldStandard.met,
+    goNoGo: r.goNoGo,
     darkDays: r.darkDays,
     last4AvgMin: r.last4AvgMin,
     pace: {

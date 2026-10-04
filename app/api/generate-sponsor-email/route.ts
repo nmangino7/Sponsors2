@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { STUDY_RESOURCES, STUDY_METHODOLOGY, PHASE_DETECTION, SPECIFICITY_INSTRUCTIONS, SPONSOR_EMAIL_TONE, FAILURE_MODE_PLAYBOOK } from "../context";
 import { MODEL_EMAIL, createMessage, extractText, friendlyError, logUsage, withRetry } from "../anthropic";
 import { computePace, formatPaceFacts, parseDurationToMinutes } from "../pace";
-import { formatAllFacts, loadDiagnosis, syncSponsorFromCard, reportAgeDays, STALE_REPORT_DAYS } from "../diagnose";
+import { formatAllFacts, loadDiagnosis, syncSponsorFromCard, reportAgeDays, STALE_REPORT_DAYS, cardDiagnosis } from "../diagnose";
+import { parseWriter, sponsorEmail } from "../templates";
 import { getStore } from "../store";
 import { requireUser } from "../guard";
 
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
   if (user instanceof NextResponse) return user;
 
   try {
-    const { startDay, date, sponsor, examDate } = await req.json();
+    const { startDay, date, sponsor, examDate, writer: writerIn } = await req.json();
+    const writer = parseWriter(writerIn);
     const store = getStore();
 
     const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -88,6 +90,26 @@ HARD REQUIREMENTS:
 - If they are behind, say so directly with the higher number. NEVER suggest moving their exam date.
 - Every task bullet has a time-range estimate. Plain text only, blank lines between sections and days.`;
 
+    // Free and Claude-app modes still save the promise, so the next upload grades it.
+    const remember = async (body: string) => {
+      if (d) {
+        await store.addEmail({
+          sponsorId: d.sponsor.id, kind: "sponsor", body, phase: d.readiness.phase,
+          checkpoint: d.next, checkpointResult: d.lastResult, createdBy: user.email,
+        });
+      }
+    };
+    if (writer === "free") {
+      const dx = d ?? cardDiagnosis({ ...sponsor, examDate: examDate || sponsor.examDate });
+      const email = sponsorEmail(dx, sponsor, days);
+      await remember(email);
+      return NextResponse.json({ email, writer, checkpoint: d?.next ?? null, lastCheckpoint: d?.lastResult ?? null });
+    }
+    if (writer === "claude-app") {
+      await remember("[Written in the Claude app from a copied prompt]");
+      return NextResponse.json({ prompt: `${SYSTEM_PROMPT}\n\n---\n\n${prompt}`, writer, checkpoint: d?.next ?? null, lastCheckpoint: d?.lastResult ?? null });
+    }
+
     const message = await withRetry(() => createMessage({
       model: MODEL_EMAIL,
       max_tokens: 8000,
@@ -99,12 +121,7 @@ HARD REQUIREMENTS:
     logUsage("sponsor-email", message);
     const email = extractText(message);
 
-    if (d && email) {
-      await store.addEmail({
-        sponsorId: d.sponsor.id, kind: "sponsor", body: email, phase: d.readiness.phase,
-        checkpoint: d.next, checkpointResult: d.lastResult, createdBy: user.email,
-      });
-    }
+    if (email) await remember(email);
 
     return NextResponse.json({ email, checkpoint: d?.next ?? null, lastCheckpoint: d?.lastResult ?? null });
   } catch (err: unknown) {

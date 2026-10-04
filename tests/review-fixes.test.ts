@@ -76,7 +76,7 @@ test("Phase 1 with unknown page counts never gets an exam promise", () => {
   const today = "2026-09-20";
   const report = makeReport({ reportDate: today, pagesRead: null, pagesTotal: null, readingMinutesLeft: null, daily: activeOn([today]) });
   const pace = computePace({ pagesRead: null, pagesTotal: null, examDate: "2026-12-20", today: d(today) });
-  const r = assessReadiness({ report, pace });
+  const r = assessReadiness({ report, pace, examDate: "2026-12-20" });
   assert.equal(r.phase, 1);
   const cp = buildCheckpoint({ report, pace, readiness: r, today });
   assert.equal(cp.metric, "active_days");

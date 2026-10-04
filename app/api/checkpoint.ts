@@ -77,6 +77,14 @@ export function buildCheckpoint({ report, pace, readiness, today }: BuildInput):
     };
   }
 
+  // No exam date on file: nothing else can be paced until one is booked.
+  if (readiness.daysToExam === null) {
+    return {
+      metric: "exam_scheduled", createdOn: today, due, baseline: 0, target: 1, minScore: null,
+      text: `Book your ${readiness.exam ? (/^\d+$/.test(readiness.exam) ? `Series ${readiness.exam}` : readiness.exam) : "exam"} and reply with the date by ${when}.`,
+    };
+  }
+
   if (readiness.phase === 1 && pace.pagesRead !== null && pace.pagesTotal !== null) {
     const perDay = pace.requiredPagesPerDay ?? Math.max(5, Math.ceil((pace.pagesRemaining ?? 0) / 14));
     const target = Math.min(pace.pagesTotal, pace.pagesRead + perDay * CHECKPOINT_DAYS);
